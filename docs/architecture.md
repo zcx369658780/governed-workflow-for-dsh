@@ -120,8 +120,8 @@ The exact V0.4 enforcement boundary:
 | Module | Responsibility (future) |
 |---|---|
 | GitHub Issue / network authority provider | Fetch authority from GitHub; implements the same `AuthorityProvider` contract. |
-| Monotonic hard tool guard / `tools/pre-execute` policy | Enforce non-bypassable rules regardless of prompt. |
-| Guard allow/deny evidence events | Record tool-policy decisions once the guard exists. |
+| Broader Git/path hard enforcement | Extend the V0.4 monotonic guard beyond the `bash` tool name to Git/path/GitHub semantics and Bash-command parsing. |
+| Guard allow/deny evidence events | Durable tool-policy decision recording once an upstream-compatible event path exists. |
 | Approval integration | Read-only policy advice and approval surfaces. |
 | `governed-builder` Skill | Instruction-level guidance for agents acting as the builder role. |
 | Policy profiles (`strict`, `standard`, `fast`) | Named compositions selectable per session. |
@@ -159,16 +159,18 @@ blocker (`BLOCKED_UPSTREAM_*`), not as a supported durable guarantee.
 DSH composes a running tree from ordered `cordis.patch.yml` layers. This package
 is a **bundle**: its `package.json` declares `dsh.bundle.patch`, so `dsh plugin
 --profile <name> add dsh-governed-workflow` joins the layer stack and its patch
-inserts two rows — `governed-workflow` (the `GovernanceService`) and
-`governed-workflow-evidence` (the `GovernanceEvidenceService`).
+inserts three rows — `governed-workflow` (the `GovernanceService`),
+`governed-workflow-evidence` (the `GovernanceEvidenceService`), and
+`governed-workflow-guard` (the `GovernanceToolGuardService`).
 
 ## Non-goals for the current task
 
 - GitHub REST/GraphQL/`gh` authority fetching;
 - network clients or credentials;
-- Git/path/shell tool enforcement;
-- `tools/pre-execute` or monotonic `ctx.tools.guard()` policy;
-- tool allow/deny decision logic;
+- Git/path enforcement and Bash command semantics parsing (the V0.4 guard only
+  gates the `bash` tool name; it never parses Git/path/`gh` intent);
+- durable guard-decision evidence (deferred by the accepted upstream
+  SessionEvent blocker);
 - approval workflows;
 - model-facing governance tools;
 - `governed-builder` Skill;
