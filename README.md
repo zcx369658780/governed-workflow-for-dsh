@@ -13,13 +13,25 @@ with a `governed-builder` Skill for instruction-level guidance.
 
 ## Status
 
-**V0.2 authority core.** The V0 bootstrap skeleton and the V0.1 governance core
-(lifecycle state machine + `ctx.governance` service) are accepted. This stage
-adds the authority capability: a provider-neutral `AuthorityProvider` contract,
-a runtime-validated immutable authority snapshot, and a config-backed reference
-provider. The plugin can now **observe an authority** and advance the lifecycle
-to `AUTHORITY_OBSERVED`, but it is **not yet tool-enforcing**. See
-[docs/architecture.md](docs/architecture.md) for the design map and trust model.
+**V0.3 durable evidence core.** V0 (bootstrap), V0.1 (governance core), and
+V0.2 (authority core) are accepted. This stage adds the durable audit
+substrate: merge-extensible governance session events, a typed evidence
+recorder (`ctx.governanceEvidence`) targeting an explicit `Session`, a
+non-surface projection/audit helper, and an explicit flush checkpoint. The
+plugin is **authority-capable + durable governance evidence, not yet
+tool-enforcing**. See [docs/architecture.md](docs/architecture.md) for the
+design map, evidence vocabulary, and trust model.
+
+## Evidence
+
+Governance facts are appended to an explicit `Session` as non-surface events
+(`governance/authority-observed`, `governance/authority-rejected`,
+`governance/lifecycle-transition`). They add no model-visible message and are
+projected back in sequence order for audit/replay. Recording is append-only;
+`flush()` requests the DSH durability checkpoint (no-op without a persistence
+backend). Note: the current DSH `Session.append` cannot set `ignorable`, so a
+session containing these events is not reconstructable without this plugin —
+see [docs/dsh-compatibility.md](docs/dsh-compatibility.md).
 
 ## Install
 
