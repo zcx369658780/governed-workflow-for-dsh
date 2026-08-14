@@ -7,7 +7,7 @@ import { defineConfig } from 'tsdown'
  * work from a plain node_modules context.
  */
 export default defineConfig({
-  entry: ['src/index.ts'],
+  entry: ['src/index.ts', 'src/evidence-service.ts'],
   outDir: 'lib',
   format: ['esm'],
   platform: 'node',

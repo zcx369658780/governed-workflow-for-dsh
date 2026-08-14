@@ -13,13 +13,31 @@ with a `governed-builder` Skill for instruction-level guidance.
 
 ## Status
 
-**V0.2 authority core.** The V0 bootstrap skeleton and the V0.1 governance core
-(lifecycle state machine + `ctx.governance` service) are accepted. This stage
-adds the authority capability: a provider-neutral `AuthorityProvider` contract,
-a runtime-validated immutable authority snapshot, and a config-backed reference
-provider. The plugin can now **observe an authority** and advance the lifecycle
-to `AUTHORITY_OBSERVED`, but it is **not yet tool-enforcing**. See
-[docs/architecture.md](docs/architecture.md) for the design map and trust model.
+**V0.3 evidence core — durable reload upstream-blocked.** V0 (bootstrap),
+V0.1 (governance core), and V0.2 (authority core) are accepted. This stage
+adds the evidence audit substrate: merge-extensible governance session events,
+a typed evidence recorder (`ctx.governanceEvidence`) targeting an explicit
+`Session`, a non-surface projection/audit helper, and an explicit flush
+checkpoint. The plugin is **authority-capable + evidence-recording, not yet
+tool-enforcing** (first-party durable reload is upstream-blocked). See
+[docs/architecture.md](docs/architecture.md) for the design map, evidence
+vocabulary, and trust model.
+
+## Evidence
+
+Governance facts are appended to an explicit `Session` as non-surface events
+(`governance/authority-observed`, `governance/authority-rejected`,
+`governance/lifecycle-transition`). They add no model-visible message and are
+projected back in sequence order for audit/replay. Recording is append-only;
+`flush()` requests the DSH durability checkpoint (no-op without a persistence
+backend).
+
+**Durable-reload limitation:** current DSH exposes no way to mark these events
+`ignorable` and no public runtime registration for out-of-repo event types, so
+first-party persisted load/resume refuses a log containing them — **even when
+this plugin is installed**. In-memory append/replay works; durable reload is an
+upstream capability blocker. See
+[docs/dsh-compatibility.md](docs/dsh-compatibility.md).
 
 ## Install
 

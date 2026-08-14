@@ -9,3 +9,5 @@
 - insert:
     - id: governed-workflow
       name: dsh-governed-workflow
+    - id: governed-workflow-evidence
+      name: dsh-governed-workflow/evidence-service
