@@ -13,15 +13,15 @@ with a `governed-builder` Skill for instruction-level guidance.
 
 ## Status
 
-**V0.3 evidence core — durable reload upstream-blocked.** V0 (bootstrap),
-V0.1 (governance core), and V0.2 (authority core) are accepted. This stage
-adds the evidence audit substrate: merge-extensible governance session events,
-a typed evidence recorder (`ctx.governanceEvidence`) targeting an explicit
-`Session`, a non-surface projection/audit helper, and an explicit flush
-checkpoint. The plugin is **authority-capable + evidence-recording, not yet
-tool-enforcing** (first-party durable reload is upstream-blocked). See
-[docs/architecture.md](docs/architecture.md) for the design map, evidence
-vocabulary, and trust model.
+**V0.4 runtime Bash guard.** V0 (bootstrap), V0.1 (governance core), V0.2
+(authority core), and V0.3 (evidence core — durable reload upstream-blocked)
+are accepted. This stage adds the first runtime-enforcing slice: a monotonic
+`ctx.tools.guard()` that denies DSH `bash` tool calls when there is no accepted
+authority or when governance is in a terminal state (`BLOCKED` / `COMPLETED` /
+`REVIEW_PENDING`). The project is now **authority-capable + evidence-recording
++ first monotonic Bash runtime guard**; durable evidence reload remains
+upstream-blocked; Git/path/GitHub enforcement is not yet implemented. See
+[docs/architecture.md](docs/architecture.md).
 
 ## Evidence
 
