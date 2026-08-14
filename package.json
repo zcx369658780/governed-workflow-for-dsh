@@ -1,7 +1,7 @@
 {
   "name": "dsh-governed-workflow",
   "version": "0.1.0",
-  "description": "Policy-enforced, evidence-first governed workflows for DeepSeek Harness agents — V0 bootstrap foundation (installable/loadable plugin-bundle skeleton)",
+  "description": "Policy-enforced, evidence-first governed workflows for DeepSeek Harness agents — installable community plugin (governance core + authority provider)",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.js",

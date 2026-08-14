@@ -127,8 +127,8 @@ function isDenseStringArray(value: unknown, check: (item: string) => boolean): v
   return true
 }
 
-/** Build a frozen `AuthorityError` with an optional field. */
-function failure(code: AuthorityErrorCode, message: string, field?: string): AuthorityResult {
+/** Build a frozen `AuthorityResult` failure with an optional field. */
+export function authorityFailure(code: AuthorityErrorCode, message: string, field?: string): AuthorityResult {
   return Object.freeze({
     ok: false as const,
     error: Object.freeze(field === undefined ? { code, message } : { code, message, field }),
@@ -149,67 +149,67 @@ function failure(code: AuthorityErrorCode, message: string, field?: string): Aut
  */
 export function validateAuthority(input: unknown): AuthorityResult {
   if (input === undefined || input === null) {
-    return failure('AUTHORITY_UNAVAILABLE', 'no authority configured')
+    return authorityFailure('AUTHORITY_UNAVAILABLE', 'no authority configured')
   }
   if (!isPlainRecord(input)) {
-    return failure('INVALID_AUTHORITY', 'authority must be a plain object')
+    return authorityFailure('INVALID_AUTHORITY', 'authority must be a plain object')
   }
 
   // Strict: reject unknown own keys (inherited keys are already invisible here).
   for (const key of Object.keys(input)) {
     if (!KNOWN_KEYS.has(key)) {
-      return failure('INVALID_AUTHORITY', `unexpected field "${key}"`, key)
+      return authorityFailure('INVALID_AUTHORITY', `unexpected field "${key}"`, key)
     }
   }
 
   const taskId = input.taskId
   if (!isNonBlankString(taskId)) {
-    return failure('INVALID_AUTHORITY', 'taskId must be a non-blank string', 'taskId')
+    return authorityFailure('INVALID_AUTHORITY', 'taskId must be a non-blank string', 'taskId')
   }
 
   const source = input.source
   if (!isNonBlankString(source)) {
-    return failure('INVALID_AUTHORITY', 'source must be a non-blank string', 'source')
+    return authorityFailure('INVALID_AUTHORITY', 'source must be a non-blank string', 'source')
   }
 
   const repository = input.repository
   if (repository !== undefined && !isNonBlankString(repository)) {
-    return failure('INVALID_AUTHORITY', 'repository must be a non-blank string', 'repository')
+    return authorityFailure('INVALID_AUTHORITY', 'repository must be a non-blank string', 'repository')
   }
 
   const baselineRef = input.baselineRef
   if (baselineRef !== undefined && (!isNonBlankString(baselineRef) || !isValidRefName(baselineRef))) {
-    return failure('INVALID_AUTHORITY', 'baselineRef must be a valid git ref name', 'baselineRef')
+    return authorityFailure('INVALID_AUTHORITY', 'baselineRef must be a valid git ref name', 'baselineRef')
   }
 
   const baselineSha = input.baselineSha
   if (baselineSha !== undefined && (!isNonBlankString(baselineSha) || !SHA_PATTERN.test(baselineSha))) {
-    return failure('INVALID_AUTHORITY', 'baselineSha must be a 7-40 hex git SHA', 'baselineSha')
+    return authorityFailure('INVALID_AUTHORITY', 'baselineSha must be a 7-40 hex git SHA', 'baselineSha')
   }
 
   const candidateBranch = input.candidateBranch
   if (candidateBranch !== undefined && (!isNonBlankString(candidateBranch) || !isValidRefName(candidateBranch))) {
-    return failure('INVALID_AUTHORITY', 'candidateBranch must be a valid git ref name', 'candidateBranch')
+    return authorityFailure('INVALID_AUTHORITY', 'candidateBranch must be a valid git ref name', 'candidateBranch')
   }
 
   const allowedPaths = input.allowedPaths
   if (allowedPaths !== undefined && !isDenseStringArray(allowedPaths, () => true)) {
-    return failure('INVALID_AUTHORITY', 'allowedPaths must be a dense array of non-blank strings', 'allowedPaths')
+    return authorityFailure('INVALID_AUTHORITY', 'allowedPaths must be a dense array of non-blank strings', 'allowedPaths')
   }
 
   const protectedBranches = input.protectedBranches
   if (protectedBranches !== undefined && !isDenseStringArray(protectedBranches, isValidRefName)) {
-    return failure('INVALID_AUTHORITY', 'protectedBranches must be a dense array of valid git ref names', 'protectedBranches')
+    return authorityFailure('INVALID_AUTHORITY', 'protectedBranches must be a dense array of valid git ref names', 'protectedBranches')
   }
 
   const taskReference = input.taskReference
   if (taskReference !== undefined && !isNonBlankString(taskReference)) {
-    return failure('INVALID_AUTHORITY', 'taskReference must be a non-blank string', 'taskReference')
+    return authorityFailure('INVALID_AUTHORITY', 'taskReference must be a non-blank string', 'taskReference')
   }
 
   const observedAt = input.observedAt
   if (observedAt !== undefined && (typeof observedAt !== 'string' || Number.isNaN(Date.parse(observedAt)))) {
-    return failure('INVALID_AUTHORITY', 'observedAt must be a parseable date string', 'observedAt')
+    return authorityFailure('INVALID_AUTHORITY', 'observedAt must be a parseable date string', 'observedAt')
   }
 
   const snapshot: AuthoritySnapshot = Object.freeze({
@@ -226,4 +226,54 @@ export function validateAuthority(input: unknown): AuthorityResult {
   })
 
   return Object.freeze({ ok: true as const, snapshot })
+}
+
+/**
+ * Normalize a provider-reported failure envelope. A well-formed
+ * `{ code, message }` is preserved (frozen); anything else becomes a canonical
+ * malformed-failure error.
+ */
+function normalizeProviderError(rawError: unknown): AuthorityError {
+  if (isPlainRecord(rawError)) {
+    const code = rawError.code
+    const message = rawError.message
+    if ((code === 'AUTHORITY_UNAVAILABLE' || code === 'INVALID_AUTHORITY') && isNonBlankString(message)) {
+      return Object.freeze({ code, message })
+    }
+  }
+  return Object.freeze({ code: 'INVALID_AUTHORITY' as const, message: 'provider returned a malformed failure envelope' })
+}
+
+/**
+ * Normalize an untrusted provider result at the governance admission boundary.
+ *
+ * A provider's `resolve()` return is treated as untyped runtime data: the
+ * envelope shape is checked, a success snapshot is re-validated through
+ * `validateAuthority()`, and provenance is enforced — a snapshot's `source`
+ * must equal the provider's nonblank `kind`, so a provider cannot silently
+ * claim another source. Malformed envelopes, invalid snapshots, and
+ * source/kind mismatches all fail closed.
+ */
+export function normalizeProviderResult(raw: unknown, kind: string): AuthorityResult {
+  if (!isPlainRecord(raw)) {
+    return authorityFailure('INVALID_AUTHORITY', 'provider returned a malformed result envelope')
+  }
+  if (raw.ok === true) {
+    const canonical = validateAuthority(raw.snapshot)
+    if (!canonical.ok) {
+      return canonical
+    }
+    if (canonical.snapshot.source !== kind) {
+      return authorityFailure(
+        'INVALID_AUTHORITY',
+        `snapshot source "${canonical.snapshot.source}" does not match provider kind "${kind}"`,
+        'source',
+      )
+    }
+    return canonical
+  }
+  if (raw.ok === false) {
+    return Object.freeze({ ok: false as const, error: normalizeProviderError(raw.error) })
+  }
+  return authorityFailure('INVALID_AUTHORITY', 'provider returned a malformed result envelope')
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import GovernanceService from '../src/governance.js'
-import { validateAuthority, type AuthorityProvider } from '../src/authority.js'
+import { validateAuthority, type AuthorityProvider, type AuthorityResult } from '../src/authority.js'
 import type { LifecycleState } from '../src/lifecycle.js'
 
 const VALID_AUTHORITY = {
@@ -13,8 +13,13 @@ const VALID_AUTHORITY = {
 }
 
 /** A minimal offline provider over raw input. */
-function testProvider(raw: unknown): AuthorityProvider {
-  return { kind: 'test', resolve: () => validateAuthority(raw) }
+function testProvider(raw: unknown, kind = 'config'): AuthorityProvider {
+  return { kind, resolve: () => validateAuthority(raw) }
+}
+
+/** A provider whose `resolve()` returns arbitrary untrusted runtime output. */
+function rawProvider(kind: string, resolve: () => unknown): AuthorityProvider {
+  return { kind, resolve: resolve as () => AuthorityResult }
 }
 
 describe('GovernanceService (Cordis service)', () => {
@@ -179,5 +184,114 @@ describe('GovernanceService (Cordis service)', () => {
     expect(invalidCtx.governance.snapshot().state).toBe('UNINITIALIZED')
     expect(invalidCtx.governance.acceptedAuthority()).toBeNull()
     await invalidFiber.dispose()
+  })
+
+  describe('provider-output trust boundary', () => {
+    it('rejects ok:true with a malformed snapshot; state remains UNINITIALIZED', async () => {
+      const ctx = new Context()
+      const fiber = ctx.plugin(GovernanceService)
+      await fiber
+      const service = ctx.governance
+
+      const provider = rawProvider('config', () => ({ ok: true, snapshot: { taskId: '' } }))
+      const result = service.observeAuthority(provider)
+      expect(result.ok).toBe(false)
+      expect(service.snapshot().state).toBe('UNINITIALIZED')
+      expect(service.acceptedAuthority()).toBeNull()
+
+      await fiber.dispose()
+    })
+
+    it('accepts a valid-but-mutable snapshot only as a separately validated frozen copy', async () => {
+      const ctx = new Context()
+      const fiber = ctx.plugin(GovernanceService)
+      await fiber
+      const service = ctx.governance
+
+      const mutable = { taskId: 'issue-5', source: 'config', allowedPaths: ['src'] }
+      const provider = rawProvider('config', () => ({ ok: true, snapshot: mutable }))
+      expect(service.observeAuthority(provider).ok).toBe(true)
+      expect(service.snapshot().state).toBe('AUTHORITY_OBSERVED')
+
+      const accepted = service.acceptedAuthority()!
+      expect(accepted).not.toBe(mutable)
+      expect(Object.isFrozen(accepted)).toBe(true)
+      expect(Object.isFrozen(accepted.allowedPaths)).toBe(true)
+
+      // Mutating the provider-owned object cannot affect the accepted snapshot.
+      mutable.taskId = 'mutated'
+      mutable.allowedPaths.push('evil')
+      expect(service.acceptedAuthority()?.taskId).toBe('issue-5')
+      expect([...(service.acceptedAuthority()?.allowedPaths ?? [])]).toEqual(['src'])
+
+      await fiber.dispose()
+    })
+
+    it('fails closed on a malformed result envelope without throwing', async () => {
+      const ctx = new Context()
+      const fiber = ctx.plugin(GovernanceService)
+      await fiber
+      const service = ctx.governance
+
+      for (const envelope of [null, 'x', 42, {}, { ok: true }, { ok: 'yes' }, { ok: false }]) {
+        const provider = rawProvider('config', () => envelope)
+        expect(service.observeAuthority(provider).ok).toBe(false)
+        expect(service.snapshot().state).toBe('UNINITIALIZED')
+      }
+
+      await fiber.dispose()
+    })
+
+    it('fails closed when the provider throws', async () => {
+      const ctx = new Context()
+      const fiber = ctx.plugin(GovernanceService)
+      await fiber
+      const service = ctx.governance
+
+      const provider = rawProvider('config', () => { throw new Error('boom') })
+      expect(service.observeAuthority(provider).ok).toBe(false)
+      expect(service.snapshot().state).toBe('UNINITIALIZED')
+
+      await fiber.dispose()
+    })
+
+    it('fails closed on a source/kind provenance mismatch', async () => {
+      const ctx = new Context()
+      const fiber = ctx.plugin(GovernanceService)
+      await fiber
+      const service = ctx.governance
+
+      const provider = testProvider(VALID_AUTHORITY, 'github-issue') // snapshot source "config" != kind
+      const result = service.observeAuthority(provider)
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.error.field).toBe('source')
+      expect(service.snapshot().state).toBe('UNINITIALIZED')
+
+      await fiber.dispose()
+    })
+
+    it('after acceptance, every failure form leaves state and snapshot unchanged', async () => {
+      const ctx = new Context()
+      const fiber = ctx.plugin(GovernanceService)
+      await fiber
+      const service = ctx.governance
+
+      expect(service.observeAuthority(testProvider(VALID_AUTHORITY)).ok).toBe(true)
+      const accepted = service.acceptedAuthority()
+
+      const badProviders: AuthorityProvider[] = [
+        rawProvider('config', () => ({ ok: true, snapshot: { taskId: '' } })),
+        rawProvider('config', () => null),
+        rawProvider('config', () => { throw new Error('boom') }),
+        testProvider(VALID_AUTHORITY, 'github-issue'),
+      ]
+      for (const provider of badProviders) {
+        expect(service.observeAuthority(provider).ok).toBe(false)
+        expect(service.snapshot().state).toBe('AUTHORITY_OBSERVED')
+        expect(service.acceptedAuthority()).toBe(accepted)
+      }
+
+      await fiber.dispose()
+    })
   })
 })

@@ -8,7 +8,13 @@ import {
   type LifecycleResult,
   type LifecycleState,
 } from './lifecycle.js'
-import type { AuthorityProvider, AuthorityResult, AuthoritySnapshot } from './authority.js'
+import {
+  authorityFailure,
+  normalizeProviderResult,
+  type AuthorityProvider,
+  type AuthorityResult,
+  type AuthoritySnapshot,
+} from './authority.js'
 import { ConfigAuthorityProvider } from './config-provider.js'
 
 /** Plugin configuration for the governance service. */
@@ -120,15 +126,34 @@ export class GovernanceService extends Service {
   /**
    * Resolve authority through the provider abstraction and, only on success,
    * advance `UNINITIALIZED -> AUTHORITY_OBSERVED` and record the accepted
-   * immutable snapshot. Resolution/validation failure leaves both the lifecycle
-   * state and any previously accepted snapshot unchanged (fail closed); a
-   * subsequent observation can never overwrite an already accepted snapshot.
+   * immutable snapshot.
+   *
+   * The provider's `resolve()` return is treated as untrusted runtime output:
+   * exceptions are caught, the result envelope is normalized, a success
+   * snapshot is re-validated through the canonical `validateAuthority()`, and
+   * the admitted snapshot's `source` must match the provider's nonblank `kind`.
+   * Any failure leaves both the lifecycle state and a previously accepted
+   * snapshot unchanged (fail closed), and a subsequent observation can never
+   * overwrite an already accepted snapshot.
    * @param provider - optional override; defaults to the configured provider.
-   * @returns the provider's explicit success/failure result.
+   * @returns the normalized explicit success/failure result.
    */
   observeAuthority(provider?: AuthorityProvider): AuthorityResult {
-    const result = (provider ?? this.provider).resolve()
+    const resolved = provider ?? this.provider
 
+    const kind = resolved.kind
+    if (typeof kind !== 'string' || kind.trim() !== kind || kind.length === 0) {
+      return authorityFailure('INVALID_AUTHORITY', 'authority provider kind must be a non-blank string')
+    }
+
+    let raw: unknown
+    try {
+      raw = resolved.resolve()
+    } catch {
+      return authorityFailure('INVALID_AUTHORITY', 'authority provider threw during resolve()')
+    }
+
+    const result = normalizeProviderResult(raw, kind)
     if (!result.ok) {
       return result
     }
