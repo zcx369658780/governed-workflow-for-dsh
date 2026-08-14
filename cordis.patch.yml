@@ -1,0 +1,11 @@
+# dsh-governed-workflow bundle layer, declared by `dsh.bundle.patch` in
+# package.json. When a profile lists this bundle, the profile composer applies
+# this patch over the earlier bundle layers; the user's own `cordis.patch.yml`
+# and any `--patch` overlay may override this row by id.
+#
+# V0 inserts only the bootstrap plugin row. The plugin package is referenced
+# by its npm name so Node resolution finds the installed code (like the
+# official `dsh-hello-plugin` tutorial); no relative source path here.
+- insert:
+    - id: governed-workflow
+      name: dsh-governed-workflow
