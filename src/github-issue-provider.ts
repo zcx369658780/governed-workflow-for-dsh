@@ -116,10 +116,36 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return proto === Object.prototype || proto === null
 }
 
+/** A parsed fenced-code fence line (open or close candidate). */
+interface FenceLine {
+  readonly char: '`' | '~'
+  readonly len: number
+  /** Whether the rest of the line after the fence run is whitespace-only. */
+  readonly restIsBlank: boolean
+}
+
+/**
+ * Classify a single line as a potential fence. A fence run is up to three
+ * leading spaces followed by at least three backticks or tildes. The
+ * "rest of line" is preserved separately so a closing fence can be told apart
+ * from an opening fence with an info string (CommonMark: a closing fence's
+ * remainder must be whitespace-only).
+ */
+function parseFenceLine(line: string): FenceLine | null {
+  const match = /^\s{0,3}(`{3,}|~{3,})(.*)$/.exec(line)
+  if (match === null) return null
+  return { char: match[1][0] as '`' | '~', len: match[1].length, restIsBlank: /^\s*$/.test(match[2]) }
+}
+
 /**
  * Remove fenced code blocks so a literal authority-block example inside a
  * ```/~~~ fence is not mistaken for the real block. This is lexical
  * normalization to locate the block, not semantic interpretation of prose.
+ *
+ * Follows the CommonMark distinction between opening and closing fences: a
+ * closing fence must use the same fence character, be at least as long as the
+ * opening run, and have a whitespace-only remainder — so a content line such
+ * as ` ```not-a-close ` or `~~~not-a-close` does NOT end the fence.
  */
 function stripFencedCodeBlocks(markdown: string): string {
   const lines = markdown.split('\n')
@@ -128,23 +154,20 @@ function stripFencedCodeBlocks(markdown: string): string {
   let fenceChar = ''
   let fenceLen = 0
   for (const line of lines) {
-    const match = /^\s{0,3}(`{3,}|~{3,})/.exec(line)
-    if (match) {
-      const char = match[1][0]
-      const len = match[1].length
-      if (!inFence) {
-        inFence = true
-        fenceChar = char
-        fenceLen = len
-      } else if (char === fenceChar && len >= fenceLen) {
-        inFence = false
-      }
-      // Fence lines (and any differing-fence content lines) are never output.
-      continue
-    }
+    const fence = parseFenceLine(line)
     if (!inFence) {
-      out.push(line)
+      if (fence !== null && fence.len >= 3) {
+        inFence = true
+        fenceChar = fence.char
+        fenceLen = fence.len
+      } else {
+        out.push(line)
+      }
+    } else if (fence !== null && fence.char === fenceChar && fence.len >= fenceLen && fence.restIsBlank) {
+      inFence = false
     }
+    // Otherwise (inside a fence): the line is content and is dropped, whether
+    // or not it looks like a fence of another character or has an info string.
   }
   return out.join('\n')
 }

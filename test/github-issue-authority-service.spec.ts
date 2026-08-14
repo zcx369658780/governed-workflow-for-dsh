@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { Context } from '@deepseek-ai/cordis'
+import { Context, Service } from '@deepseek-ai/cordis'
 import { CallId } from '@deepseek-ai/dsh-llm'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineTool, type ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import GovernanceService from '../src/governance.js'
 import GovernanceToolGuardService from '../src/guard-service.js'
 import { GitHubIssueAuthorityProvider, type GitHubIssueResponse, type GitHubIssueTransport } from '../src/github-issue-provider.js'
-import GitHubIssueAuthorityService from '../src/github-issue-authority-service.js'
+import GitHubIssueAuthorityService, { type GitHubIssueAuthorityServiceConfig } from '../src/github-issue-authority-service.js'
 import { GOVERNANCE_DENY_NO_AUTHORITY } from '../src/guard.js'
 
 const REPO = 'zcx369658780/governed-workflow-for-dsh'
@@ -50,6 +50,11 @@ function textOf(result: ToolExecutionResult): string {
 
 function mutationInput(callId: string, name: string) {
   return { callId: CallId(callId), name, arguments: { input: 'x' }, signal: new AbortController().signal }
+}
+
+/** Yield enough microtask turns for an async fiber load to run the bootstrap constructor. */
+async function flushMicrotasks(): Promise<void> {
+  for (let i = 0; i < 10; i += 1) await Promise.resolve()
 }
 
 describe('GitHub Issue authority governance integration (fake transport)', () => {
@@ -152,36 +157,41 @@ describe('GitHub Issue authority governance integration (fake transport)', () =>
 })
 
 describe('GitHubIssueAuthorityService (lifecycle-owned bootstrap)', () => {
-  /** Mount the real service class body with a fake transport (test-only injection). */
-  function mountService(ctx: Context, config: { repository: string; issueNumber: number }, transport: GitHubIssueTransport) {
+  /** Mount the real service with a fake transport and delegate its async init to the fiber. */
+  function mountService(ctx: Context, config: GitHubIssueAuthorityServiceConfig, transport: GitHubIssueTransport) {
     class Bootstrap {
       static inject = ['governance'] as const
+      #inner: GitHubIssueAuthorityService
       constructor(c: Context) {
-        new GitHubIssueAuthorityService(c, config, transport)
+        this.#inner = new GitHubIssueAuthorityService(c, config, transport)
+      }
+      [Service.init]() {
+        return this.#inner[Service.init]()
       }
     }
     return ctx.plugin(Bootstrap)
   }
 
-  it('disposal while the request is pending aborts the observation cleanly', async () => {
+  it('awaiting the fiber waits for a delayed observation to complete', async () => {
     const ctx = new Context()
     await ctx.plugin(GovernanceService, {})
 
-    let receivedSignal: AbortSignal | undefined
-    const transport: GitHubIssueTransport = (_url, init) => {
-      receivedSignal = init.signal
-      return new Promise<GitHubIssueResponse>(() => {}) // never settles
-    }
+    let resolveTransport!: (value: GitHubIssueResponse) => void
+    const transport: GitHubIssueTransport = () => new Promise<GitHubIssueResponse>((res) => { resolveTransport = res })
 
     const fiber = mountService(ctx, { repository: REPO, issueNumber: ISSUE }, transport)
-    await fiber
+    let settled = false
+    const loaded = fiber.then(() => { settled = true; return 'loaded' })
 
-    expect(receivedSignal).toBeDefined()
+    await flushMicrotasks()
+    expect(settled).toBe(false) // still pending while the transport is delayed
+
+    resolveTransport(okResponse())
+    expect(await loaded).toBe('loaded')
+    expect(settled).toBe(true)
+    expect(ctx.governance.snapshot().state).toBe('AUTHORITY_OBSERVED')
+    expect(ctx.governance.acceptedAuthority()?.taskId).toBe('github-issue:zcx369658780/governed-workflow-for-dsh#17')
     await fiber.dispose()
-
-    expect(receivedSignal?.aborted).toBe(true)
-    expect(ctx.governance.snapshot().state).toBe('UNINITIALIZED')
-    expect(ctx.governance.acceptedAuthority()).toBeNull()
   })
 
   it('successful bootstrap admits authority but never auto-advances ADMIT_TASK / RUN', async () => {
@@ -193,6 +203,62 @@ describe('GitHubIssueAuthorityService (lifecycle-owned bootstrap)', () => {
 
     expect(ctx.governance.snapshot().state).toBe('AUTHORITY_OBSERVED')
     expect(ctx.governance.acceptedAuthority()?.taskId).toBe('github-issue:zcx369658780/governed-workflow-for-dsh#17')
+    await fiber.dispose()
+  })
+
+  it('disposal while the request is pending aborts the observation promptly', async () => {
+    const ctx = new Context()
+    await ctx.plugin(GovernanceService, {})
+
+    let receivedSignal: AbortSignal | undefined
+    const transport: GitHubIssueTransport = (_url, init) => {
+      receivedSignal = init.signal
+      return new Promise<GitHubIssueResponse>(() => {}) // never settles
+    }
+
+    const fiber = mountService(ctx, { repository: REPO, issueNumber: ISSUE }, transport)
+    await flushMicrotasks()
+
+    expect(receivedSignal).toBeDefined()
+    expect(receivedSignal!.aborted).toBe(false)
+
+    await fiber.dispose()
+
+    expect(receivedSignal!.aborted).toBe(true)
+    expect(ctx.governance.snapshot().state).toBe('UNINITIALIZED')
+    expect(ctx.governance.acceptedAuthority()).toBeNull()
+  })
+
+  it('timeout aborts a never-settling provider and completes fail-closed', async () => {
+    const ctx = new Context()
+    await ctx.plugin(GovernanceService, {})
+
+    let receivedSignal: AbortSignal | undefined
+    const transport: GitHubIssueTransport = (_url, init) => {
+      receivedSignal = init.signal
+      return new Promise<GitHubIssueResponse>(() => {}) // never settles
+    }
+
+    // Bypass the config-schema min (1000ms) with a tiny direct-constructor value.
+    const fiber = mountService(ctx, { repository: REPO, issueNumber: ISSUE, timeoutMs: 30 }, transport)
+    await fiber // waits for the observation to settle via timeout
+
+    expect(receivedSignal?.aborted).toBe(true)
+    expect(ctx.governance.snapshot().state).toBe('UNINITIALIZED')
+    expect(ctx.governance.acceptedAuthority()).toBeNull()
+    await fiber.dispose()
+  })
+
+  it('a failed observation still completes as a clean fail-closed loaded state', async () => {
+    const ctx = new Context()
+    await ctx.plugin(GovernanceService, {})
+
+    const transport: GitHubIssueTransport = () => Promise.resolve({ status: 404, text: () => Promise.resolve('{"message":"Not Found"}') })
+    const fiber = mountService(ctx, { repository: REPO, issueNumber: ISSUE }, transport)
+    await fiber // must not reject, even though authority is unavailable
+
+    expect(ctx.governance.snapshot().state).toBe('UNINITIALIZED')
+    expect(ctx.governance.acceptedAuthority()).toBeNull()
     await fiber.dispose()
   })
 

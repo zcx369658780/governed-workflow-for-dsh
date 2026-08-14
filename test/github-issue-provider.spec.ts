@@ -153,6 +153,50 @@ describe('parseV1AuthorityBlock', () => {
     expect(result.ok).toBe(true)
     if (result.ok) expect(result.policy).toEqual(VALID_POLICY)
   })
+
+  it('backtick adversarial: a ```not-a-close content line does not end the fence', () => {
+    const evil = { baselineSha: '1111111111111111111111111111111111111111' }
+    const body = [
+      issueBody(VALID_POLICY),
+      '',
+      '```text',
+      '```not-a-close',
+      issueBody(evil),
+      '```',
+    ].join('\n')
+    const result = parseV1AuthorityBlock(body)
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.policy).toEqual(VALID_POLICY)
+  })
+
+  it('tilde adversarial: a ~~~not-a-close content line does not end the fence', () => {
+    const evil = { baselineSha: '1111111111111111111111111111111111111111' }
+    const body = [
+      issueBody(VALID_POLICY),
+      '',
+      '~~~text',
+      '~~~not-a-close',
+      issueBody(evil),
+      '~~~',
+    ].join('\n')
+    const result = parseV1AuthorityBlock(body)
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.policy).toEqual(VALID_POLICY)
+  })
+
+  it('a fenced authority example never becomes live authority, even with adversarial fence lines', () => {
+    const evil = { baselineSha: '1111111111111111111111111111111111111111' }
+    const body = [
+      '```text',
+      '```not-a-close',
+      issueBody(evil),
+      '~~~not-a-close',
+      '```',
+    ].join('\n')
+    const result = parseV1AuthorityBlock(body)
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error.code).toBe('AUTHORITY_UNAVAILABLE')
+  })
 })
 
 describe('validateGitHubIssueConfig', () => {
