@@ -7,7 +7,14 @@ import { defineConfig } from 'tsdown'
  * work from a plain node_modules context.
  */
 export default defineConfig({
-  entry: ['src/index.ts', 'src/evidence-service.ts', 'src/guard-service.ts', 'src/governed-builder-skill.ts'],
+  entry: [
+    'src/index.ts',
+    'src/evidence-service.ts',
+    'src/guard-service.ts',
+    'src/governed-builder-skill.ts',
+    'src/github-issue-provider.ts',
+    'src/github-issue-authority-service.ts',
+  ],
   outDir: 'lib',
   format: ['esm'],
   platform: 'node',

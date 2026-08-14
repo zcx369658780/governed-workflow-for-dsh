@@ -24,6 +24,13 @@ task file, a config snapshot, or another Governor-specified source), refresh and
 read that source before mutating anything, and follow its current scope exactly.
 Keep this provider-neutral: GitHub is one example, not a hard dependency.
 
+- A deployment may obtain authority from a network provider (for example a
+  read-only public GitHub Issue fetch); this is provider-neutral.
+- An in-progress fetch is not accepted authority; mutation must wait for the
+  accepted snapshot, never merely a started request.
+- Do not retry or reroute around a failed runtime authority observation unless
+  independently authorized by the Governor.
+
 ## Read/discovery vs mutation
 
 - Read/discovery tool names the guard does not gate (read, read_image, grep,

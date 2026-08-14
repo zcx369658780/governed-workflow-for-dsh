@@ -42,6 +42,8 @@ the `ignorable` envelope marker — matches the checkout).
 | `ctx.tools.guard(guard)` + `ToolGuard` (`(exec) => string \| undefined`) | Monotonic runtime guard seam (denial after `tools/pre-execute`, before body) | `packages/core/tools/src/index.ts` |
 | `ToolRuntime.execute(input)` + `ToolExecution` (`name`, `arguments`) | Deterministic guard unit tests; Code Mode sub-dispatches traverse this same pipeline | `packages/core/tools/src/index.ts` |
 | `ctx.skills.register(SkillRegistration)` + `ctx.skills.list()` / `ctx.skills.get()` | Runtime-registered `governed-builder` Skill | `packages/skill/skill/src/index.ts` |
+| Cordis `ctx.effect(execute, label)` (returns an awaitable disposer) | Lifecycle-owned GitHub authority bootstrap (abort + timer cleanup on dispose) | `vendor/cordis/src/fiber.ts` |
+| Node global `fetch` / `RequestInit` / `Response` | Default public GitHub.com transport (unauthenticated GET) | Node ≥18 standard library |
 | `prepare` build script + pnpm `allowBuilds` | Git-hosted TypeScript install path | `docs/user/develop/basic/publish.md` |
 
 ## Compatibility risks
@@ -71,6 +73,14 @@ the `ignorable` envelope marker — matches the checkout).
 - **Git installs require a `prepare` allowlist.** pnpm ≥10 refuses to run a git
   dependency's `prepare` script until the consumer adds the package key to the
   profile's `pnpm-workspace.yaml` under `allowBuilds`.
+- **GitHub REST is an external surface, not a DSH surface.** The V0.8 provider
+  uses `GET https://api.github.com/repos/{owner}/{repo}/issues/{n}` with
+  `Accept: application/vnd.github+json`, `X-GitHub-Api-Version: 2022-11-28`, and
+  a stable `dsh-governed-workflow` User-Agent. The unauthenticated primary rate
+  limit (currently 60 requests/hour per originating IP) and the
+  redirect/transfer behavior (301 on transferred issues) are current GitHub
+  constraints, not plugin guarantees; the provider fails closed on `403`/`429`
+  and refuses to follow redirects.
 - **Types are authored but not shipped yet.** The governance/authority/evidence
   types and their `SessionEventMap`/`Context` merges are fully typed in source
   (typecheck passes), but the package still ships JS only, so external consumers

@@ -6,13 +6,15 @@ independently authorized tasks.
 
 ## Status
 
-**V0.7 async authority resolution.** V0 (bootstrap), V0.1 (governance core),
-V0.2 (authority core), V0.3 (evidence core — durable reload upstream-blocked),
-V0.4 (Bash runtime guard), V0.5 (mutation guard expansion), and V0.6
-(governed-builder Skill) are accepted. This stage upgrades the authority
-resolution seam so a provider may resolve synchronously or asynchronously
-through a cancellable, fail-closed admission path; the built-in config provider
-remains synchronous and no GitHub/network provider ships yet.
+**V0.8 public GitHub Issue authority provider.** V0 (bootstrap), V0.1
+(governance core), V0.2 (authority core), V0.3 (evidence core — durable reload
+upstream-blocked), V0.4 (Bash runtime guard), V0.5 (mutation guard expansion),
+V0.6 (governed-builder Skill), and V0.7 (async authority resolution) are
+accepted. This stage ships an **explicit opt-in** public, unauthenticated,
+read-only GitHub.com Issue authority provider (`kind: github-issue`) plus a
+lifecycle-owned bootstrap. GitHub identity is provider-derived; no
+token/private-repo/GraphQL/comment authority, polling, or replacement semantics
+ship yet.
 
 ## Design principle
 
@@ -45,6 +47,8 @@ src/evidence-service.ts   # GovernanceEvidenceService (ctx.governanceEvidence)
 src/guard.ts              # pure runtime guard policy evaluator (V0.4/V0.5)
 src/guard-service.ts      # GovernanceToolGuardService (ctx.governanceGuard)
 src/governed-builder-skill.ts  # governed-builder Skill registration
+src/github-issue-provider.ts    # public GitHub Issue authority provider (V0.8)
+src/github-issue-authority-service.ts  # opt-in lifecycle-owned GitHub bootstrap (V0.8)
 test/*.spec.ts            # offline lifecycle/authority/evidence/guard/skill tests + real-Context tests
 tsdown.config.ts          # self-contained ESM transpile (the `prepare` build)
 ```
@@ -65,6 +69,8 @@ tsdown.config.ts          # self-contained ESM transpile (the `prepare` build)
 | V0.4–V0.5 | Runtime guard policy (`ctx.governanceGuard`) | A single monotonic `ctx.tools.guard()` denying the mutation-capable tools `bash`, `write`, and `edit` with no accepted authority or in a terminal state. Reads live governance state; not model-facing; never mutates arguments, parses Bash, or enforces paths. |
 | V0.6 | Governed builder Skill (`governed-builder`) | A runtime-registered, provider-neutral operating procedure for the Builder role. Behavioral guidance only; never advances the lifecycle, installs authority, or unlocks mutation. |
 | V0.7 | Async authority resolution | `AuthorityProvider.resolve()` may be synchronous or asynchronous (cancellable); `observeAuthority()` is awaitable, fail-closed on abort, and race-safe — at most one snapshot is ever admitted, with no replacement semantics. |
+| V0.8 | Public GitHub Issue authority provider | `kind: github-issue`. One unauthenticated read-only GET of a fixed `https://api.github.com` endpoint; parses exactly one strict V1 machine-readable Issue-body block; derives `source`/`repository`/`taskId`/`taskReference` from the configured target; returns a canonical `AuthorityResult` for the V0.7 admission path. |
+| V0.8 | GitHub bootstrap service | Explicit opt-in, lifecycle-owned, timeout-bounded, cancellable bootstrap that awaits `ctx.governance.observeAuthority(provider, { signal })`. Absent from the default bundle, so no network request occurs unless a profile enables it. |
 
 ## Evidence events (V0.3)
 
@@ -150,6 +156,95 @@ The built-in `ConfigAuthorityProvider` remains synchronous, and the constructor
 performs a deterministic synchronous bootstrap through the same shared admission
 helper — no detached/background promise exists.
 
+## Public GitHub Issue authority (V0.8)
+
+`GitHubIssueAuthorityProvider` (`kind: github-issue`) is the first real network
+authority adapter. It is **public, unauthenticated, read-only, and one-shot**.
+
+### Authority-block contract
+
+The Issue body must contain **exactly one** V1 marker:
+
+```text
+<!-- dsh-governed-workflow-authority:v1
+{ ...JSON... }
+-->
+```
+
+Rules (all fail-closed):
+
+- missing block → `AUTHORITY_UNAVAILABLE`;
+- duplicate markers/blocks or an unsupported version → `INVALID_AUTHORITY`;
+- malformed JSON / non-object JSON / unknown keys / oversized block →
+  `INVALID_AUTHORITY`;
+- the block may supply only `baselineRef`, `baselineSha`, `candidateBranch`,
+  `allowedPaths`, `protectedBranches` — identity/provenance keys are rejected as
+  unknown keys;
+- a literal marker example inside a fenced code block is ignored (the parser
+  strips fenced code regions before locating the block);
+- the extracted substring is bounded (64 KiB) before `JSON.parse`.
+
+### Derived identity/provenance
+
+For configured `OWNER/REPO` + issue `N`:
+
+- `source = github-issue`;
+- `repository = OWNER/REPO`;
+- `taskId = github-issue:OWNER/REPO#N`;
+- `taskReference = https://github.com/OWNER/REPO/issues/N`.
+
+The Issue body cannot override these. `observedAt` is omitted (GitHub
+`updated_at` is not the local observation time).
+
+### Config + fixed-host/SSRF boundary
+
+- fixed API origin `https://api.github.com`; no configurable base URL;
+- repository config is exactly two nonblank `OWNER/REPO` segments (alphanumeric
+  at both ends, `._-` in the middle — rejects empty segments and `.`/`..`);
+- path segments are URL-encoded before the endpoint is built;
+- issue number must be a positive safe integer;
+- `redirect: 'error'` plus a 3xx-status guard — redirects/transfers fail closed
+  rather than being followed;
+- no GitHub Enterprise/custom host support.
+
+### Transport
+
+Each `resolve()` performs **at most one** GET with `Accept:
+application/vnd.github+json`, `X-GitHub-Api-Version: 2022-11-28`, a stable
+`dsh-governed-workflow` User-Agent, and the caller's `AbortSignal`. There is
+**no `Authorization` header** and **no token/env credential lookup**. `404`/`410`
+(unavailable), `403`/`429` (rate-limited/forbidden — no retry), other non-2xx,
+and network rejection all fail closed without leaking raw response bodies. The
+full response is bounded (~1 MiB) before `JSON.parse`; malformed JSON →
+`INVALID_AUTHORITY`. The response envelope must be a plain object whose
+`number` equals the configured issue, `state === "open"`, `body` is a string,
+and which carries no own `pull_request` key (a PR is not an Issue).
+
+### Lifecycle-owned bootstrap + no-default-network
+
+`GitHubIssueAuthorityService` is the opt-in bootstrap. It borrows
+`ctx.governance` and starts `observeAuthority(provider, { signal })` inside a
+`ctx.effect(...)`: the effect disposer aborts the in-flight observation and
+clears the timeout timer on disposal/unload. A bounded timeout (default 12 s,
+configurable 1–60 s) aborts the same observation signal; no retry follows a
+timeout, and a timeout result is fail-closed. The provider's transport is
+injectable for deterministic offline tests, but the URL is always constructed by
+the provider module, so the injection surface is not an arbitrary runtime URL
+escape hatch.
+
+**No network by default:** the service is **not** listed in `cordis.patch.yml`,
+so installing the bundle issues zero GitHub requests unless a profile adds the
+`dsh-governed-workflow/github-issue-authority-service` row. If config-backed
+authority is already accepted, the bootstrap performs zero fetches (the V0.7
+`observeAuthority()` pre-check preserves precedence/no-overwrite).
+
+### One-shot snapshot semantics
+
+V0.8 fetches one Issue snapshot for one admission. Later Issue edits do not
+mutate the accepted snapshot; there is no polling, refresh, or replacement, and
+task closure after acceptance does not retroactively change the snapshot. The
+terminal lifecycle guard remains the mutation freeze.
+
 ## Trust model (current boundary)
 
 - **Model and tool calls are untrusted inputs.** Anything the model passes into
@@ -170,7 +265,9 @@ helper — no detached/background promise exists.
 
 | Module | Responsibility (future) |
 |---|---|
-| GitHub Issue / network authority provider | Fetch authority from GitHub; implements the same `AuthorityProvider` contract. |
+| Authenticated / private GitHub authority | PAT / `GITHUB_TOKEN` / `GH_TOKEN` / OAuth / GitHub App auth, private repositories, and authenticated fallback (deliberately out of V0.8 scope). |
+| GitHub Enterprise / GraphQL / comment authority | Custom API base URLs, GraphQL authority, and Issue-comment authority (not in V0.8). |
+| Authority replacement / polling | Refresh or replace an already accepted snapshot; live polling (V0.8 is one-shot). |
 | Broader Git/path hard enforcement | Extend the V0.5 monotonic guard beyond the `bash`/`write`/`edit` tool names to Git/path/GitHub semantics and Bash-command parsing. |
 | Guard allow/deny evidence events | Durable tool-policy decision recording once an upstream-compatible event path exists. |
 | Approval integration | Read-only policy advice and approval surfaces. |
@@ -216,17 +313,25 @@ inserts four rows — `governed-workflow` (the `GovernanceService`),
 
 ## Non-goals for the current task
 
-- GitHub Issue/network authority provider;
+- PAT / `GITHUB_TOKEN` / `GH_TOKEN` / OAuth / GitHub App authentication;
+- private repository authority;
+- GitHub Enterprise/custom API base URL;
+- GraphQL authority;
+- Issue comment authority;
+- PR-as-authority;
+- automatic retries/backoff/polling;
+- authority replacement/refresh after acceptance;
+- GitHub write/mutation operations;
 - protected-branch Git runtime enforcement;
 - `allowedPaths` / canonical path enforcement;
-- new filesystem interception policy;
 - Bash/Git command parsing (the guard gates tool names, not command semantics);
 - GitHub merge/close/successor runtime enforcement;
 - durable guard-decision SessionEvents (deferred by the accepted upstream
   SessionEvent blocker);
 - workaround for the V0.3 durable-reload blocker;
 - approval workflows;
-- automatic lifecycle admission/run transitions;
+- automatic lifecycle admission/run transitions (the bootstrap admits authority
+  only — never `ADMIT_TASK` / `RUN`);
 - policy profiles;
 - reviewer/multi-agent orchestration;
 - successor automation;

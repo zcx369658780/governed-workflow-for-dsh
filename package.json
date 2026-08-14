@@ -10,6 +10,8 @@
     "./evidence-service": "./lib/evidence-service.js",
     "./guard-service": "./lib/guard-service.js",
     "./governed-builder-skill": "./lib/governed-builder-skill.js",
+    "./github-issue-provider": "./lib/github-issue-provider.js",
+    "./github-issue-authority-service": "./lib/github-issue-authority-service.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
