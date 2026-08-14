@@ -7,14 +7,16 @@ project.
 
 ## How AI is used here
 
-- **Task authority.** Work is issued as GitHub issues by a human-independent
-  reviewer (GPT) and executed by an AI builder under bootstrap/governance
-  boundaries. No AI self-accepts, self-merges, or closes its own tasks.
+- **Task authority.** Work is issued as GitHub issues by a reviewer who is
+  independent from the Builder (currently GPT), and executed by an AI builder
+  under bootstrap/governance boundaries. No AI self-accepts, self-merges, or
+  closes its own tasks.
 - **Code and documentation.** AI drafts code and prose; a human owner remains
   the final product authority and merges only after independent review.
 - **No secrets.** AI assistance must never commit secrets, API keys,
-  credentials, local machine paths, or private configuration. This is a
-  hard, non-bypassable rule.
+  credentials, local machine paths, or private configuration. In the current
+  state this rule is enforced by review and prompt-level bootstrap governance,
+  **not** yet by a runtime guard — the runtime enforcement is a future task.
 
 ## Expectations for contributors
 
