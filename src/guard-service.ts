@@ -28,7 +28,7 @@ export class GovernanceToolGuardService extends Service {
       return evaluateGovernanceToolPolicy(execution.name, snapshot.state, snapshot.authority)
     })
 
-    console.log('[governed-workflow] bash runtime guard registered')
+    console.log('[governed-workflow] mutation runtime guard registered (bash, write, edit)')
   }
 }
 
