@@ -9,9 +9,8 @@ or DeepSeek AI.
   extends.
 - Do not imply official sponsorship, endorsement, or maintenance by DeepSeek in
   this repository's README, docs, or any downstream packaging.
-- `dsh-` is used as a conventional package-name prefix for DeepSeek Harness
-  plugins (as recommended by the upstream community guidance); it does not
-  confer official status.
+- The `dsh-` package-name prefix matches the naming pattern used by upstream
+  examples; it does not confer official status.
 
 If you distribute this plugin, keep this notice and the README disclaimer
 intact.

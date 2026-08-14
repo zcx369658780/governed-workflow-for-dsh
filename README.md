@@ -13,9 +13,11 @@ with a `governed-builder` Skill for instruction-level guidance.
 
 ## Status
 
-**V0 bootstrap.** This is a minimal, installable/loadable plugin-bundle
-skeleton. It proves the DSH build/test/load path and reserves — but does **not**
-implement — the governance modules. See
+**V0.1 governance core.** The V0 bootstrap skeleton (installable/loadable
+bundle) is accepted. This stage adds the first real runtime primitive: a pure,
+fail-closed builder-side lifecycle state machine and a typed `governance`
+Cordis service (`ctx.governance`). It does **not** yet enforce shell/Git/path
+behavior, and it is not yet governance-enforcing. See
 [docs/architecture.md](docs/architecture.md) for the design map.
 
 ## Install
@@ -28,7 +30,7 @@ dsh plugin --profile demo add dsh-governed-workflow
 # pnpm >=10 requires an allowBuilds entry the first time)
 dsh plugin --profile demo add github:zcx369658780/governed-workflow-for-dsh
 dsh --profile demo --dump-config   # confirm the governed-workflow layer
-dsh --profile demo                 # observe "[governed-workflow] plugin loaded"
+dsh --profile demo                 # observe "[governed-workflow] governance service loaded"
 ```
 
 ## Development
