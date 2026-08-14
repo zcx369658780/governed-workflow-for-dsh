@@ -98,4 +98,22 @@ describe('lifecycle state machine (pure)', () => {
     expect(Object.isFrozen(bad)).toBe(true)
     if (!bad.ok) expect(Object.isFrozen(bad.error)).toBe(true)
   })
+
+  it('fails closed against inherited Object.prototype member names', () => {
+    const hostile = ['constructor', 'toString', 'hasOwnProperty', 'valueOf', 'isPrototypeOf', '__proto__'] as const
+
+    for (const name of hostile) {
+      // As an action: must be undefined, not an inherited function.
+      expect(nextState('UNINITIALIZED', name as never)).toBeUndefined()
+      const byAction = transition('UNINITIALIZED', name as never)
+      expect(byAction.ok).toBe(false)
+      if (!byAction.ok) expect(byAction.error.code).toBe('INVALID_TRANSITION')
+
+      // As a from-state: must also fail closed.
+      expect(nextState(name as never, 'RUN')).toBeUndefined()
+      const byFrom = transition(name as never, 'RUN')
+      expect(byFrom.ok).toBe(false)
+      if (!byFrom.ok) expect(byFrom.error.code).toBe('INVALID_TRANSITION')
+    }
+  })
 })

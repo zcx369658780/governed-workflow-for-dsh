@@ -64,4 +64,25 @@ describe('GovernanceService (Cordis service)', () => {
     expect(await run('BLOCK')).toBe('REVIEW_PENDING')
     expect(await run('COMPLETE')).toBe('REVIEW_PENDING')
   })
+
+  it('fails closed when handed a prototype-chain member name as an action', async () => {
+    const ctx = new Context()
+    const fiber = ctx.plugin(GovernanceService)
+    await fiber
+    const service = ctx.governance
+
+    const bad = service.apply('constructor' as never)
+    expect(bad.ok).toBe(false)
+    if (!bad.ok) expect(bad.error.code).toBe('INVALID_TRANSITION')
+    // The review's failure mode (storing a function as the lifecycle state and
+    // then throwing on the next transition) must not occur: state is untouched.
+    expect(service.snapshot().state).toBe('UNINITIALIZED')
+    expect(service.snapshot().lastResult).toBe(bad)
+
+    // The service still transitions normally afterwards.
+    expect(service.apply('OBSERVE_AUTHORITY').ok).toBe(true)
+    expect(service.snapshot().state).toBe('AUTHORITY_OBSERVED')
+
+    await fiber.dispose()
+  })
 })

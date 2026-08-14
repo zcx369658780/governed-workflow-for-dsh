@@ -88,9 +88,17 @@ const TRANSITIONS: Readonly<Record<LifecycleState, Readonly<Partial<Record<Lifec
 /**
  * The next state for `action` from `from`, or `undefined` when the transition
  * is not allowed. Pure: no mutation, no I/O.
+ *
+ * Own-property checks fail closed against prototype-chain lookups: a plain
+ * `TRANSITIONS[from][action]` would resolve inherited `Object.prototype`
+ * members (`"constructor"`, `"toString"`, `"hasOwnProperty"`, …) for untyped or
+ * version-skewed callers instead of returning `undefined`, which would let a
+ * hostile action name masquerade as a valid transition.
  */
 export function nextState(from: LifecycleState, action: LifecycleAction): LifecycleState | undefined {
-  return TRANSITIONS[from][action]
+  if (!Object.hasOwn(TRANSITIONS, from)) return undefined
+  const rows = TRANSITIONS[from]
+  return Object.hasOwn(rows, action) ? rows[action] : undefined
 }
 
 /**
