@@ -13,16 +13,18 @@ with a `governed-builder` Skill for instruction-level guidance.
 
 ## Status
 
-**V0.6 governed-builder Skill.** V0 (bootstrap), V0.1 (governance core), V0.2
-(authority core), V0.3 (evidence core — durable reload upstream-blocked), V0.4
-(Bash runtime guard), and V0.5 (mutation guard expansion) are accepted. This
-stage adds the first public `governed-builder` Skill: a runtime-registered,
-provider-neutral operating procedure for a repository Builder working under
-externally supplied task authority. The project is now **authority-capable +
-evidence-recording + monotonic mutation-tool guard (`bash` / `write` / `edit`) +
-`governed-builder` Skill**; durable evidence reload remains upstream-blocked;
-path/Git/GitHub hard enforcement and the network authority provider remain
-future work. See [docs/architecture.md](docs/architecture.md).
+**V0.7 async authority resolution.** V0 (bootstrap), V0.1 (governance core),
+V0.2 (authority core), V0.3 (evidence core — durable reload upstream-blocked),
+V0.4 (Bash runtime guard), V0.5 (mutation guard expansion), and V0.6
+(governed-builder Skill) are accepted. This stage upgrades the authority
+resolution seam so an `AuthorityProvider` may resolve **synchronously or
+asynchronously** through a cancellable, fail-closed admission path; the built-in
+config provider remains synchronous, and no GitHub/network provider ships yet.
+The project is **authority-capable + evidence-recording + monotonic
+mutation-tool guard (`bash` / `write` / `edit`) + `governed-builder` Skill**;
+durable evidence reload remains upstream-blocked; path/Git/GitHub hard
+enforcement and the network authority provider remain future work. See
+[docs/architecture.md](docs/architecture.md).
 
 ## Skill vs runtime plugin
 

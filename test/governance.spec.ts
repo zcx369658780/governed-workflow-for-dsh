@@ -5,14 +5,14 @@ import { validateAuthority, type AuthorityProvider, type AuthorityResult } from 
 import type { LifecycleState } from '../src/lifecycle.js'
 
 const VALID_AUTHORITY = {
-  taskId: 'issue-5',
+  taskId: 'issue-7',
   source: 'config',
   repository: 'zcx369658780/governed-workflow-for-dsh',
   baselineRef: 'main',
   baselineSha: '93654a9ad4e02fa1f19eee270b5d8519f29f6e1c',
 }
 
-/** A minimal offline provider over raw input. */
+/** A minimal offline synchronous provider over raw input. */
 function testProvider(raw: unknown, kind = 'config'): AuthorityProvider {
   return { kind, resolve: () => validateAuthority(raw) }
 }
@@ -20,6 +20,22 @@ function testProvider(raw: unknown, kind = 'config'): AuthorityProvider {
 /** A provider whose `resolve()` returns arbitrary untrusted runtime output. */
 function rawProvider(kind: string, resolve: () => unknown): AuthorityProvider {
   return { kind, resolve: resolve as () => AuthorityResult }
+}
+
+/** An async provider whose `resolve()` returns a (possibly deferred) result. */
+function asyncProvider(kind: string, resolve: () => AuthorityResult | PromiseLike<AuthorityResult>): AuthorityProvider {
+  return { kind, resolve }
+}
+
+/** A manually controlled deferred result. */
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void; reject: (error: unknown) => void } {
+  let resolve!: (value: T) => void
+  let reject!: (error: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
 }
 
 describe('GovernanceService (Cordis service)', () => {
@@ -42,8 +58,7 @@ describe('GovernanceService (Cordis service)', () => {
     await fiber
     const service = ctx.governance
 
-    // Reach AUTHORITY_OBSERVED via authority observation, then continue.
-    expect(service.observeAuthority(testProvider(VALID_AUTHORITY)).ok).toBe(true)
+    expect((await service.observeAuthority(testProvider(VALID_AUTHORITY))).ok).toBe(true)
     expect(service.snapshot().state).toBe('AUTHORITY_OBSERVED')
 
     const steps: ReadonlyArray<[Parameters<typeof service.apply>[0], LifecycleState]> = [
@@ -55,7 +70,6 @@ describe('GovernanceService (Cordis service)', () => {
       expect(service.snapshot().state).toBe(expected)
     }
 
-    // From RUNNING, SUBMIT_REVIEW is invalid: fail closed, state unchanged.
     const before = service.snapshot().state
     const bad = service.apply('SUBMIT_REVIEW')
     expect(bad.ok).toBe(false)
@@ -70,7 +84,7 @@ describe('GovernanceService (Cordis service)', () => {
       const fiber = ctx.plugin(GovernanceService)
       await fiber
       const service = ctx.governance
-      expect(service.observeAuthority(testProvider(VALID_AUTHORITY)).ok).toBe(true)
+      expect((await service.observeAuthority(testProvider(VALID_AUTHORITY))).ok).toBe(true)
       for (const action of ['ADMIT_TASK', 'RUN', tail, 'SUBMIT_REVIEW'] as const) {
         expect(service.apply(action).ok).toBe(true)
       }
@@ -89,17 +103,15 @@ describe('GovernanceService (Cordis service)', () => {
     await fiber
     const service = ctx.governance
 
-    // Raw transition is rejected: state and authority stay put.
     const bad = service.apply('OBSERVE_AUTHORITY')
     expect(bad.ok).toBe(false)
     if (!bad.ok) expect(bad.error.message).toContain('observeAuthority')
     expect(service.snapshot().state).toBe('UNINITIALIZED')
     expect(service.acceptedAuthority()).toBeNull()
 
-    // The authority-aware path still works afterwards.
-    expect(service.observeAuthority(testProvider(VALID_AUTHORITY)).ok).toBe(true)
+    expect((await service.observeAuthority(testProvider(VALID_AUTHORITY))).ok).toBe(true)
     expect(service.snapshot().state).toBe('AUTHORITY_OBSERVED')
-    expect(service.acceptedAuthority()?.taskId).toBe('issue-5')
+    expect(service.acceptedAuthority()?.taskId).toBe('issue-7')
 
     await fiber.dispose()
   })
@@ -123,16 +135,14 @@ describe('GovernanceService (Cordis service)', () => {
     await fiber
     const service = ctx.governance
 
-    // Failure leaves the lifecycle unchanged.
-    expect(service.observeAuthority(testProvider(undefined)).ok).toBe(false)
+    expect((await service.observeAuthority(testProvider(undefined))).ok).toBe(false)
     expect(service.snapshot().state).toBe('UNINITIALIZED')
     expect(service.acceptedAuthority()).toBeNull()
 
-    // Success advances and records the snapshot.
-    const ok = service.observeAuthority(testProvider(VALID_AUTHORITY))
+    const ok = await service.observeAuthority(testProvider(VALID_AUTHORITY))
     expect(ok.ok).toBe(true)
     expect(service.snapshot().state).toBe('AUTHORITY_OBSERVED')
-    expect(service.acceptedAuthority()?.taskId).toBe('issue-5')
+    expect(service.acceptedAuthority()?.taskId).toBe('issue-7')
 
     await fiber.dispose()
   })
@@ -143,11 +153,10 @@ describe('GovernanceService (Cordis service)', () => {
     await fiber
     const service = ctx.governance
 
-    expect(service.observeAuthority(testProvider(VALID_AUTHORITY)).ok).toBe(true)
+    expect((await service.observeAuthority(testProvider(VALID_AUTHORITY))).ok).toBe(true)
     const accepted = service.acceptedAuthority()
 
-    // A later failing observation leaves both state and snapshot untouched.
-    expect(service.observeAuthority(testProvider({ taskId: '' })).ok).toBe(false)
+    expect((await service.observeAuthority(testProvider({ taskId: '' }))).ok).toBe(false)
     expect(service.snapshot().state).toBe('AUTHORITY_OBSERVED')
     expect(service.acceptedAuthority()).toBe(accepted)
 
@@ -164,7 +173,6 @@ describe('GovernanceService (Cordis service)', () => {
     const snapshot = service.acceptedAuthority()!
     expect(Object.isFrozen(snapshot)).toBe(true)
     expect(Object.isFrozen(snapshot.protectedBranches)).toBe(true)
-    // snapshot() builds a fresh wrapper each call.
     expect(service.snapshot()).not.toBe(service.snapshot())
 
     await fiber.dispose()
@@ -194,7 +202,7 @@ describe('GovernanceService (Cordis service)', () => {
       const service = ctx.governance
 
       const provider = rawProvider('config', () => ({ ok: true, snapshot: { taskId: '' } }))
-      const result = service.observeAuthority(provider)
+      const result = await service.observeAuthority(provider)
       expect(result.ok).toBe(false)
       expect(service.snapshot().state).toBe('UNINITIALIZED')
       expect(service.acceptedAuthority()).toBeNull()
@@ -208,9 +216,9 @@ describe('GovernanceService (Cordis service)', () => {
       await fiber
       const service = ctx.governance
 
-      const mutable = { taskId: 'issue-5', source: 'config', allowedPaths: ['src'] }
+      const mutable = { taskId: 'issue-7', source: 'config', allowedPaths: ['src'] }
       const provider = rawProvider('config', () => ({ ok: true, snapshot: mutable }))
-      expect(service.observeAuthority(provider).ok).toBe(true)
+      expect((await service.observeAuthority(provider)).ok).toBe(true)
       expect(service.snapshot().state).toBe('AUTHORITY_OBSERVED')
 
       const accepted = service.acceptedAuthority()!
@@ -218,10 +226,9 @@ describe('GovernanceService (Cordis service)', () => {
       expect(Object.isFrozen(accepted)).toBe(true)
       expect(Object.isFrozen(accepted.allowedPaths)).toBe(true)
 
-      // Mutating the provider-owned object cannot affect the accepted snapshot.
       mutable.taskId = 'mutated'
       mutable.allowedPaths.push('evil')
-      expect(service.acceptedAuthority()?.taskId).toBe('issue-5')
+      expect(service.acceptedAuthority()?.taskId).toBe('issue-7')
       expect([...(service.acceptedAuthority()?.allowedPaths ?? [])]).toEqual(['src'])
 
       await fiber.dispose()
@@ -235,7 +242,7 @@ describe('GovernanceService (Cordis service)', () => {
 
       for (const envelope of [null, 'x', 42, {}, { ok: true }, { ok: 'yes' }, { ok: false }]) {
         const provider = rawProvider('config', () => envelope)
-        expect(service.observeAuthority(provider).ok).toBe(false)
+        expect((await service.observeAuthority(provider)).ok).toBe(false)
         expect(service.snapshot().state).toBe('UNINITIALIZED')
       }
 
@@ -249,7 +256,7 @@ describe('GovernanceService (Cordis service)', () => {
       const service = ctx.governance
 
       const provider = rawProvider('config', () => { throw new Error('boom') })
-      expect(service.observeAuthority(provider).ok).toBe(false)
+      expect((await service.observeAuthority(provider)).ok).toBe(false)
       expect(service.snapshot().state).toBe('UNINITIALIZED')
 
       await fiber.dispose()
@@ -261,8 +268,8 @@ describe('GovernanceService (Cordis service)', () => {
       await fiber
       const service = ctx.governance
 
-      const provider = testProvider(VALID_AUTHORITY, 'github-issue') // snapshot source "config" != kind
-      const result = service.observeAuthority(provider)
+      const provider = testProvider(VALID_AUTHORITY, 'github-issue')
+      const result = await service.observeAuthority(provider)
       expect(result.ok).toBe(false)
       if (!result.ok) expect(result.error.field).toBe('source')
       expect(service.snapshot().state).toBe('UNINITIALIZED')
@@ -276,7 +283,7 @@ describe('GovernanceService (Cordis service)', () => {
       await fiber
       const service = ctx.governance
 
-      expect(service.observeAuthority(testProvider(VALID_AUTHORITY)).ok).toBe(true)
+      expect((await service.observeAuthority(testProvider(VALID_AUTHORITY))).ok).toBe(true)
       const accepted = service.acceptedAuthority()
 
       const badProviders: AuthorityProvider[] = [
@@ -286,10 +293,171 @@ describe('GovernanceService (Cordis service)', () => {
         testProvider(VALID_AUTHORITY, 'github-issue'),
       ]
       for (const provider of badProviders) {
-        expect(service.observeAuthority(provider).ok).toBe(false)
+        expect((await service.observeAuthority(provider)).ok).toBe(false)
         expect(service.snapshot().state).toBe('AUTHORITY_OBSERVED')
         expect(service.acceptedAuthority()).toBe(accepted)
       }
+
+      await fiber.dispose()
+    })
+  })
+
+  describe('async authority resolution (V0.7)', () => {
+    it('accepts a synchronous provider result through the awaitable API', async () => {
+      const ctx = new Context()
+      const fiber = ctx.plugin(GovernanceService)
+      await fiber
+      const service = ctx.governance
+
+      const result = await service.observeAuthority(testProvider(VALID_AUTHORITY))
+      expect(result.ok).toBe(true)
+      expect(service.snapshot().state).toBe('AUTHORITY_OBSERVED')
+
+      await fiber.dispose()
+    })
+
+    it('accepts a Promise resolving to a valid authority and revalidates it', async () => {
+      const ctx = new Context()
+      const fiber = ctx.plugin(GovernanceService)
+      await fiber
+      const service = ctx.governance
+
+      const mutable = { taskId: 'issue-7', source: 'config', allowedPaths: ['src'] }
+      const provider = asyncProvider('config', () => Promise.resolve({ ok: true, snapshot: mutable } as unknown as AuthorityResult))
+      const result = await service.observeAuthority(provider)
+      expect(result.ok).toBe(true)
+      const accepted = service.acceptedAuthority()!
+      expect(accepted).not.toBe(mutable)
+      expect(Object.isFrozen(accepted)).toBe(true)
+      mutable.taskId = 'mutated'
+      expect(service.acceptedAuthority()?.taskId).toBe('issue-7')
+
+      await fiber.dispose()
+    })
+
+    it('fails closed on a rejected Promise without throwing', async () => {
+      const ctx = new Context()
+      const fiber = ctx.plugin(GovernanceService)
+      await fiber
+      const service = ctx.governance
+
+      const provider = asyncProvider('config', () => Promise.reject(new Error('boom')))
+      const result = await service.observeAuthority(provider)
+      expect(result.ok).toBe(false)
+      expect(service.snapshot().state).toBe('UNINITIALIZED')
+
+      await fiber.dispose()
+    })
+
+    it('fails closed on a malformed async success envelope', async () => {
+      const ctx = new Context()
+      const fiber = ctx.plugin(GovernanceService)
+      await fiber
+      const service = ctx.governance
+
+      const provider = asyncProvider('config', () => Promise.resolve({ ok: true } as unknown as AuthorityResult))
+      const result = await service.observeAuthority(provider)
+      expect(result.ok).toBe(false)
+      expect(service.snapshot().state).toBe('UNINITIALIZED')
+
+      await fiber.dispose()
+    })
+
+    it('invalid provider kind fails before provider invocation', async () => {
+      const ctx = new Context()
+      const fiber = ctx.plugin(GovernanceService)
+      await fiber
+      const service = ctx.governance
+
+      let invoked = false
+      const provider: AuthorityProvider = { kind: '', resolve: () => { invoked = true; return validateAuthority(VALID_AUTHORITY) } }
+      const result = await service.observeAuthority(provider)
+      expect(result.ok).toBe(false)
+      expect(invoked).toBe(false)
+
+      await fiber.dispose()
+    })
+
+    it('an already-aborted signal prevents provider invocation', async () => {
+      const ctx = new Context()
+      const fiber = ctx.plugin(GovernanceService)
+      await fiber
+      const service = ctx.governance
+
+      const controller = new AbortController()
+      controller.abort()
+      let invoked = false
+      const provider: AuthorityProvider = { kind: 'config', resolve: () => { invoked = true; return validateAuthority(VALID_AUTHORITY) } }
+      const result = await service.observeAuthority(provider, { signal: controller.signal })
+      expect(result.ok).toBe(false)
+      expect(invoked).toBe(false)
+
+      await fiber.dispose()
+    })
+
+    it('abort during await prevents late authority admission even when the provider ignores the signal', async () => {
+      const ctx = new Context()
+      const fiber = ctx.plugin(GovernanceService)
+      await fiber
+      const service = ctx.governance
+
+      const controller = new AbortController()
+      const gate = deferred<AuthorityResult>()
+      const provider = asyncProvider('config', () => gate.promise)
+      const observation = service.observeAuthority(provider, { signal: controller.signal })
+
+      controller.abort()
+      gate.resolve(validateAuthority(VALID_AUTHORITY)) // provider resolves late, ignoring abort
+
+      const result = await observation
+      expect(result.ok).toBe(false)
+      expect(service.snapshot().state).toBe('UNINITIALIZED')
+      expect(service.acceptedAuthority()).toBeNull()
+
+      await fiber.dispose()
+    })
+
+    it('two concurrent successful async observations admit at most one snapshot', async () => {
+      const ctx = new Context()
+      const fiber = ctx.plugin(GovernanceService)
+      await fiber
+      const service = ctx.governance
+
+      const gateA = deferred<AuthorityResult>()
+      const gateB = deferred<AuthorityResult>()
+      const providerA = asyncProvider('config', () => gateA.promise)
+      const providerB = asyncProvider('config', () => gateB.promise)
+
+      const observationA = service.observeAuthority(providerA)
+      const observationB = service.observeAuthority(providerB)
+
+      gateA.resolve(validateAuthority(VALID_AUTHORITY))
+      const resultA = await observationA
+      expect(resultA.ok).toBe(true)
+
+      gateB.resolve(validateAuthority({ taskId: 'issue-7-b', source: 'config' }))
+      const resultB = await observationB
+      // The loser must return a truthful failure, never overwriting the winner.
+      expect(resultB.ok).toBe(false)
+      expect(service.acceptedAuthority()?.taskId).toBe('issue-7')
+
+      await fiber.dispose()
+    })
+
+    it('observation started after acceptance does not invoke the provider', async () => {
+      const ctx = new Context()
+      const fiber = ctx.plugin(GovernanceService)
+      await fiber
+      const service = ctx.governance
+
+      expect((await service.observeAuthority(testProvider(VALID_AUTHORITY))).ok).toBe(true)
+
+      let invoked = false
+      const late = asyncProvider('config', () => { invoked = true; return Promise.resolve(validateAuthority(VALID_AUTHORITY)) })
+      const result = await service.observeAuthority(late)
+      expect(result.ok).toBe(false)
+      expect(invoked).toBe(false)
+      expect(service.acceptedAuthority()?.taskId).toBe('issue-7')
 
       await fiber.dispose()
     })
