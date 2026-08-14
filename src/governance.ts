@@ -46,6 +46,37 @@ function isAborted(signal: AbortSignal | undefined): boolean {
 }
 
 /**
+ * Race a provider result against an abort signal, so a provider that ignores
+ * the signal and never settles cannot hang the observation. The abort listener
+ * is registered `{ once: true }` and removed on provider settlement, so no
+ * listener leaks. Rejection on abort is indistinguishable from a provider
+ * rejection at this layer; the caller disambiguates with `isAborted(signal)`.
+ */
+function resolveWithAbort<T>(promise: T | PromiseLike<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (signal === undefined) {
+    return Promise.resolve(promise)
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => reject(new Error('authority observation aborted'))
+    if (signal.aborted) {
+      onAbort()
+      return
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+    Promise.resolve(promise).then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort)
+        resolve(value)
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort)
+        reject(error)
+      },
+    )
+  })
+}
+
+/**
  * The trusted state core for `dsh-governed-workflow`: a Cordis service holding
  * the builder-side lifecycle and the accepted authority. V0.2 adds the
  * authority capability — a provider-neutral contract plus a config-backed
@@ -188,8 +219,11 @@ export class GovernanceService extends Service {
 
     let raw: unknown
     try {
-      raw = await resolved.resolve(options)
+      raw = await resolveWithAbort(resolved.resolve(options), signal)
     } catch {
+      if (isAborted(signal)) {
+        return authorityFailure('INVALID_AUTHORITY', 'authority observation was aborted during resolve()')
+      }
       return authorityFailure('INVALID_AUTHORITY', 'authority provider threw or rejected during resolve()')
     }
 

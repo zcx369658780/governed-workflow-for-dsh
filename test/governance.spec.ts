@@ -417,6 +417,26 @@ describe('GovernanceService (Cordis service)', () => {
       await fiber.dispose()
     })
 
+    it('settles fail-closed on abort even when the provider never settles', async () => {
+      const ctx = new Context()
+      const fiber = ctx.plugin(GovernanceService)
+      await fiber
+      const service = ctx.governance
+
+      const controller = new AbortController()
+      const never = new Promise<AuthorityResult>(() => {}) // never resolves/rejects
+      const provider = asyncProvider('config', () => never)
+      const observation = service.observeAuthority(provider, { signal: controller.signal })
+
+      controller.abort()
+      const result = await observation // must settle, not hang
+      expect(result.ok).toBe(false)
+      expect(service.snapshot().state).toBe('UNINITIALIZED')
+      expect(service.acceptedAuthority()).toBeNull()
+
+      await fiber.dispose()
+    })
+
     it('two concurrent successful async observations admit at most one snapshot', async () => {
       const ctx = new Context()
       const fiber = ctx.plugin(GovernanceService)

@@ -301,5 +301,30 @@ describe('GovernanceToolGuardService (real ToolRuntime guard seam)', () => {
       expect(textOf(result)).toContain(GOVERNANCE_DENY_NO_AUTHORITY)
       expect(invoked).toBe(false)
     })
+
+    it('mutation stays denied after an aborted observation even while the provider never settles', async () => {
+      const ctx = new Context()
+      await ctx.plugin(SystemPrompt)
+      await ctx.plugin(ToolRuntime)
+      await ctx.plugin(GovernanceService, {})
+      await ctx.plugin(GovernanceToolGuardService)
+      let invoked = false
+      ctx.tools.register(makeMutationTool('write', () => { invoked = true }))
+
+      const controller = new AbortController()
+      const never = new Promise<AuthorityResult>(() => {}) // provider never settles
+      const provider: AuthorityProvider = { kind: 'config', resolve: () => never }
+      const observation = ctx.governance.observeAuthority(provider, { signal: controller.signal })
+
+      controller.abort()
+      const observed = await observation // settles fail-closed even though the provider is unfinished
+      expect(observed.ok).toBe(false)
+      expect(ctx.governance.acceptedAuthority()).toBeNull()
+
+      const result = await ctx.tools.execute(mutationInput('w-never', 'write'))
+      expect(result.isError).toBe(true)
+      expect(textOf(result)).toContain(GOVERNANCE_DENY_NO_AUTHORITY)
+      expect(invoked).toBe(false)
+    })
   })
 })
