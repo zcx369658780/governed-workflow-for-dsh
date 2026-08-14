@@ -78,6 +78,27 @@ describe('GovernanceService (Cordis service)', () => {
     expect(await run('COMPLETE')).toBe('REVIEW_PENDING')
   })
 
+  it('rejects raw apply("OBSERVE_AUTHORITY") and keeps observeAuthority() as the only path', async () => {
+    const ctx = new Context()
+    const fiber = ctx.plugin(GovernanceService)
+    await fiber
+    const service = ctx.governance
+
+    // Raw transition is rejected: state and authority stay put.
+    const bad = service.apply('OBSERVE_AUTHORITY')
+    expect(bad.ok).toBe(false)
+    if (!bad.ok) expect(bad.error.message).toContain('observeAuthority')
+    expect(service.snapshot().state).toBe('UNINITIALIZED')
+    expect(service.acceptedAuthority()).toBeNull()
+
+    // The authority-aware path still works afterwards.
+    expect(service.observeAuthority(testProvider(VALID_AUTHORITY)).ok).toBe(true)
+    expect(service.snapshot().state).toBe('AUTHORITY_OBSERVED')
+    expect(service.acceptedAuthority()?.taskId).toBe('issue-5')
+
+    await fiber.dispose()
+  })
+
   it('fails closed when handed a prototype-chain member name as an action', async () => {
     const ctx = new Context()
     const fiber = ctx.plugin(GovernanceService)

@@ -2,6 +2,7 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type Schema from '@deepseek-ai/schemastery'
 import {
+  INVALID_TRANSITION,
   transition,
   type LifecycleAction,
   type LifecycleResult,
@@ -88,6 +89,26 @@ export class GovernanceService extends Service {
    * @returns the transition result.
    */
   apply(action: LifecycleAction): LifecycleResult {
+    if (action === 'OBSERVE_AUTHORITY') {
+      // Authority observation is authority-aware: reaching AUTHORITY_OBSERVED
+      // requires a validated authority, which only observeAuthority() provides.
+      // Reject the raw transition so the lifecycle cannot advance while
+      // acceptedAuthority() stays null.
+      const failure: LifecycleResult = Object.freeze({
+        ok: false as const,
+        from: this.currentState,
+        action,
+        error: Object.freeze({
+          code: INVALID_TRANSITION,
+          from: this.currentState,
+          action,
+          message: 'OBSERVE_AUTHORITY requires a validated authority — use observeAuthority()',
+        }),
+      })
+      this.lastResult = failure
+      return failure
+    }
+
     const result = transition(this.currentState, action)
     if (result.ok) {
       this.currentState = result.to

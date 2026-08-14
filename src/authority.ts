@@ -96,14 +96,33 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 /** Validate a git ref name against git-check-ref-format's core rules. */
 function isValidRefName(value: string): boolean {
   if (value.length === 0) return false
-  if (value.startsWith('.') || value.startsWith('/')) return false
-  if (value.endsWith('/') || value.endsWith('.')) return false
-  if (value.includes('..') || value.includes('//') || value.includes('@{')) return false
-  if (value.endsWith('.lock')) return false
-  for (const ch of value) {
-    const code = ch.charCodeAt(0)
-    if (code <= 0x20 || code === 0x7f) return false // control chars + space
-    if (REF_FORBIDDEN.includes(ch)) return false
+  if (value.endsWith('.')) return false
+  if (value.includes('..') || value.includes('@{')) return false
+  for (const component of value.split('/')) {
+    if (component.length === 0) return false // leading/trailing/double slash
+    if (component.startsWith('.')) return false // a component must not begin with '.'
+    if (component.endsWith('.lock')) return false // a component must not end with '.lock'
+    for (const ch of component) {
+      const code = ch.charCodeAt(0)
+      if (code <= 0x20 || code === 0x7f) return false // control chars + space
+      if (REF_FORBIDDEN.includes(ch)) return false
+    }
+  }
+  return true
+}
+
+/**
+ * True for a dense (hole-free) array whose every element is a non-blank string
+ * passing `check`. Unlike `Array.prototype.every`, this walks numeric indices
+ * so a sparse array (e.g. `Array(1)`) fails instead of being silently skipped
+ * and then materializing `undefined` when copied.
+ */
+function isDenseStringArray(value: unknown, check: (item: string) => boolean): value is readonly string[] {
+  if (!Array.isArray(value)) return false
+  for (let index = 0; index < value.length; index += 1) {
+    if (!(index in value)) return false // sparse hole
+    const element = value[index]
+    if (!isNonBlankString(element) || !check(element)) return false
   }
   return true
 }
@@ -174,14 +193,13 @@ export function validateAuthority(input: unknown): AuthorityResult {
   }
 
   const allowedPaths = input.allowedPaths
-  if (allowedPaths !== undefined && (!Array.isArray(allowedPaths) || !allowedPaths.every(isNonBlankString))) {
-    return failure('INVALID_AUTHORITY', 'allowedPaths must be an array of non-blank strings', 'allowedPaths')
+  if (allowedPaths !== undefined && !isDenseStringArray(allowedPaths, () => true)) {
+    return failure('INVALID_AUTHORITY', 'allowedPaths must be a dense array of non-blank strings', 'allowedPaths')
   }
 
   const protectedBranches = input.protectedBranches
-  if (protectedBranches !== undefined
-    && (!Array.isArray(protectedBranches) || !protectedBranches.every(branch => isNonBlankString(branch) && isValidRefName(branch)))) {
-    return failure('INVALID_AUTHORITY', 'protectedBranches must be an array of valid git ref names', 'protectedBranches')
+  if (protectedBranches !== undefined && !isDenseStringArray(protectedBranches, isValidRefName)) {
+    return failure('INVALID_AUTHORITY', 'protectedBranches must be a dense array of valid git ref names', 'protectedBranches')
   }
 
   const taskReference = input.taskReference

@@ -65,7 +65,7 @@ describe('validateAuthority (runtime validation)', () => {
       expect(result.ok).toBe(false)
       if (!result.ok) expect(result.error.field).toBe('baselineSha')
     }
-    for (const ref of ['..', 'a b', 'a//b', 'a.', '.a', 'a.lock', '/a', 'a/', 'a@{b', 'a~b', 'a^b', 'a:b', 'a?b', 'a*b', 'a[b']) {
+    for (const ref of ['..', 'a b', 'a//b', 'a.', '.a', 'a.lock', '/a', 'a/', 'a@{b', 'a~b', 'a^b', 'a:b', 'a?b', 'a*b', 'a[b', 'foo/.hidden/bar', 'foo/bar.lock/baz', 'a.lock/b']) {
       const result = validateAuthority({ taskId: 't', source: 's', baselineRef: ref })
       expect(result.ok).toBe(false)
       if (!result.ok) expect(result.error.field).toBe('baselineRef')
@@ -83,6 +83,18 @@ describe('validateAuthority (runtime validation)', () => {
       expect(result.ok).toBe(false)
       if (!result.ok) expect(result.error.field).toBe('protectedBranches')
     }
+  })
+
+  it('rejects sparse authority arrays', () => {
+    const paths = validateAuthority({ taskId: 't', source: 's', allowedPaths: Array(1) })
+    expect(paths.ok).toBe(false)
+    if (!paths.ok) expect(paths.error.field).toBe('allowedPaths')
+
+    const branches: unknown[] = ['main']
+    branches.length = 2 // hole at index 1
+    const branchResult = validateAuthority({ taskId: 't', source: 's', protectedBranches: branches })
+    expect(branchResult.ok).toBe(false)
+    if (!branchResult.ok) expect(branchResult.error.field).toBe('protectedBranches')
   })
 
   it('rejects unknown own keys and safely ignores inherited prototype members', () => {
