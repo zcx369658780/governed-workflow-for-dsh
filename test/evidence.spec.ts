@@ -55,6 +55,12 @@ describe('evidence payload builders', () => {
     expect(() => buildLifecycleTransitionPayload({ from: 'RUNNING', action: 'RUN', ok: true })).toThrow() // missing to
     expect(() => buildLifecycleTransitionPayload({ from: 'RUNNING', action: 'RUN', ok: false })).toThrow() // missing error
   })
+
+  it('rejects a falsely-failed valid transition (failure for a valid action)', () => {
+    // RUNNING --COMPLETE--> COMPLETED is valid; claiming it failed is contradictory.
+    expect(() => buildLifecycleTransitionPayload({ from: 'RUNNING', action: 'COMPLETE', ok: false, error: { code: 'INVALID_TRANSITION', message: 'claimed failure' } }))
+      .toThrow(/valid transition/)
+  })
 })
 
 describe('evidence projection', () => {
@@ -129,6 +135,12 @@ describe('evidence projection', () => {
   it('rejects a failure lifecycle event whose error code is not INVALID_TRANSITION', () => {
     const badCode = { schemaVersion: 1, from: 'RUNNING', action: 'SUBMIT_REVIEW', ok: false, error: { code: 'SOMETHING_ELSE', message: 'x' } }
     const session = Session.create(SessionId('p9'), [{ type: 'governance/lifecycle-transition', seq: 0, time: 1, data: badCode } as unknown as SessionEvent])
+    expect(() => projectEvidence(session.events)).toThrow(/malformed/)
+  })
+
+  it('rejects a falsely-failed valid transition on replay', () => {
+    const falselyFailed = { schemaVersion: 1, from: 'RUNNING', action: 'COMPLETE', ok: false, error: { code: 'INVALID_TRANSITION', message: 'claimed failure' } }
+    const session = Session.create(SessionId('p10'), [{ type: 'governance/lifecycle-transition', seq: 0, time: 1, data: falselyFailed } as unknown as SessionEvent])
     expect(() => projectEvidence(session.events)).toThrow(/malformed/)
   })
 })

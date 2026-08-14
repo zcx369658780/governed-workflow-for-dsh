@@ -179,6 +179,9 @@ export function buildLifecycleTransitionPayload(input: unknown): LifecycleTransi
     return Object.freeze({ schemaVersion: EVIDENCE_SCHEMA_VERSION, from, action, ok: true as const, to })
   }
 
+  if (nextState(from, action) !== undefined) {
+    throw new Error(`governance evidence: lifecycle-transition claims a failure for a valid transition ${from} --${action}`)
+  }
   const error = input.error
   if (!isPlainRecord(error) || error.code !== INVALID_TRANSITION || !isNonBlankString(error.message)) {
     throw new Error('governance evidence: lifecycle-transition failure requires code INVALID_TRANSITION and a non-blank message')
@@ -219,6 +222,7 @@ function isLifecycleTransitionData(value: unknown): value is LifecycleTransition
   }
   if (value.ok === false) {
     if (!ownKeysExactly(value, ['schemaVersion', 'from', 'action', 'ok', 'error'])) return false
+    if (nextState(value.from, value.action) !== undefined) return false
     const error = value.error
     if (!isPlainRecord(error) || !ownKeysExactly(error, ['code', 'message'])) return false
     return error.code === INVALID_TRANSITION && isNonBlankString(error.message)
