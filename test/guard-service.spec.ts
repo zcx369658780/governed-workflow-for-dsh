@@ -5,6 +5,7 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineTool, type ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import GovernanceService from '../src/governance.js'
 import GovernanceToolGuardService from '../src/guard-service.js'
+import { validateAuthority, type AuthorityProvider, type AuthorityResult } from '../src/authority.js'
 import { GOVERNANCE_DENY_NO_AUTHORITY, GOVERNANCE_DENY_TERMINAL_STATE } from '../src/guard.js'
 
 const VALID_AUTHORITY = {
@@ -235,5 +236,95 @@ describe('GovernanceToolGuardService (real ToolRuntime guard seam)', () => {
     result = await ctx.tools.execute(mutationInput('w5', 'write'))
     expect(result.isError).toBe(false)
     expect(invoked).toBe(true)
+  })
+
+  describe('async authority resolution + guard integration (V0.7)', () => {
+    function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+      let resolve!: (value: T) => void
+      const promise = new Promise<T>((res) => { resolve = res })
+      return { promise, resolve }
+    }
+
+    it('mutation stays denied while async authority is pending, then unlocks after admission', async () => {
+      const ctx = new Context()
+      await ctx.plugin(SystemPrompt)
+      await ctx.plugin(ToolRuntime)
+      await ctx.plugin(GovernanceService, {})
+      await ctx.plugin(GovernanceToolGuardService)
+      let invoked = false
+      ctx.tools.register(makeMutationTool('write', () => { invoked = true }))
+
+      const gate = deferred<AuthorityResult>()
+      const provider: AuthorityProvider = { kind: 'config', resolve: () => gate.promise }
+      const observation = ctx.governance.observeAuthority(provider)
+
+      // Pending: write denied before admission.
+      let result = await ctx.tools.execute(mutationInput('w-pending', 'write'))
+      expect(result.isError).toBe(true)
+      expect(textOf(result)).toContain(GOVERNANCE_DENY_NO_AUTHORITY)
+      expect(invoked).toBe(false)
+
+      gate.resolve(validateAuthority(VALID_AUTHORITY))
+      const observed = await observation
+      expect(observed.ok).toBe(true)
+      expect(ctx.governance.snapshot().state).toBe('AUTHORITY_OBSERVED')
+
+      // Admitted: write allowed.
+      result = await ctx.tools.execute(mutationInput('w-admitted', 'write'))
+      expect(result.isError).toBe(false)
+      expect(invoked).toBe(true)
+    })
+
+    it('mutation stays denied after an aborted observation even when the provider later resolves', async () => {
+      const ctx = new Context()
+      await ctx.plugin(SystemPrompt)
+      await ctx.plugin(ToolRuntime)
+      await ctx.plugin(GovernanceService, {})
+      await ctx.plugin(GovernanceToolGuardService)
+      let invoked = false
+      ctx.tools.register(makeMutationTool('write', () => { invoked = true }))
+
+      const controller = new AbortController()
+      const gate = deferred<AuthorityResult>()
+      const provider: AuthorityProvider = { kind: 'config', resolve: () => gate.promise }
+      const observation = ctx.governance.observeAuthority(provider, { signal: controller.signal })
+
+      controller.abort()
+      gate.resolve(validateAuthority(VALID_AUTHORITY)) // provider ignores abort, resolves late
+
+      const observed = await observation
+      expect(observed.ok).toBe(false)
+      expect(ctx.governance.acceptedAuthority()).toBeNull()
+
+      const result = await ctx.tools.execute(mutationInput('w-aborted', 'write'))
+      expect(result.isError).toBe(true)
+      expect(textOf(result)).toContain(GOVERNANCE_DENY_NO_AUTHORITY)
+      expect(invoked).toBe(false)
+    })
+
+    it('mutation stays denied after an aborted observation even while the provider never settles', async () => {
+      const ctx = new Context()
+      await ctx.plugin(SystemPrompt)
+      await ctx.plugin(ToolRuntime)
+      await ctx.plugin(GovernanceService, {})
+      await ctx.plugin(GovernanceToolGuardService)
+      let invoked = false
+      ctx.tools.register(makeMutationTool('write', () => { invoked = true }))
+
+      const controller = new AbortController()
+      const never = new Promise<AuthorityResult>(() => {}) // provider never settles
+      const provider: AuthorityProvider = { kind: 'config', resolve: () => never }
+      const observation = ctx.governance.observeAuthority(provider, { signal: controller.signal })
+
+      controller.abort()
+      const observed = await observation // settles fail-closed even though the provider is unfinished
+      expect(observed.ok).toBe(false)
+      expect(ctx.governance.acceptedAuthority()).toBeNull()
+
+      const result = await ctx.tools.execute(mutationInput('w-never', 'write'))
+      expect(result.isError).toBe(true)
+      expect(textOf(result)).toContain(GOVERNANCE_DENY_NO_AUTHORITY)
+      expect(invoked).toBe(false)
+    })
   })
 })

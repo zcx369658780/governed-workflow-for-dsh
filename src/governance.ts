@@ -12,6 +12,7 @@ import {
   authorityFailure,
   normalizeProviderResult,
   type AuthorityProvider,
+  type AuthorityResolveOptions,
   type AuthorityResult,
   type AuthoritySnapshot,
 } from './authority.js'
@@ -39,6 +40,42 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
+/** Whether an optional signal is already aborted (fresh read, no cross-await narrowing). */
+function isAborted(signal: AbortSignal | undefined): boolean {
+  return signal !== undefined && signal.aborted
+}
+
+/**
+ * Race a provider result against an abort signal, so a provider that ignores
+ * the signal and never settles cannot hang the observation. The abort listener
+ * is registered `{ once: true }` and removed on provider settlement, so no
+ * listener leaks. Rejection on abort is indistinguishable from a provider
+ * rejection at this layer; the caller disambiguates with `isAborted(signal)`.
+ */
+function resolveWithAbort<T>(promise: T | PromiseLike<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (signal === undefined) {
+    return Promise.resolve(promise)
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => reject(new Error('authority observation aborted'))
+    if (signal.aborted) {
+      onAbort()
+      return
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+    Promise.resolve(promise).then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort)
+        resolve(value)
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort)
+        reject(error)
+      },
+    )
+  })
+}
+
 /**
  * The trusted state core for `dsh-governed-workflow`: a Cordis service holding
  * the builder-side lifecycle and the accepted authority. V0.2 adds the
@@ -64,12 +101,14 @@ export class GovernanceService extends Service {
    */
   constructor(ctx: Context, config: GovernanceConfig = {}) {
     super(ctx, 'governance')
-    this.provider = new ConfigAuthorityProvider(config.authority)
+    const configProvider = new ConfigAuthorityProvider(config.authority)
+    this.provider = configProvider
     console.log('[governed-workflow] governance service loaded')
 
-    // Observe the config-backed authority at load time (fail-closed when
-    // unavailable/invalid). A valid authority advances to AUTHORITY_OBSERVED.
-    const observed = this.observeAuthority()
+    // Deterministic sync bootstrap: the built-in config provider resolves
+    // synchronously, so a valid config authority is admitted before any
+    // downstream mutation guard reads it. No detached/background promise.
+    const observed = this.admitResolvedAuthority(configProvider.kind, configProvider.resolve())
     if (observed.ok) {
       console.log(`[governed-workflow] authority observed: ${observed.snapshot.taskId}`)
     } else {
@@ -124,21 +163,43 @@ export class GovernanceService extends Service {
   }
 
   /**
-   * Resolve authority through the provider abstraction and, only on success,
-   * advance `UNINITIALIZED -> AUTHORITY_OBSERVED` and record the accepted
-   * immutable snapshot.
+   * Shared canonical admission: normalize/revalidate a resolved provider result
+   * and, on success, admit exactly one frozen snapshot through the
+   * `OBSERVE_AUTHORITY` boundary. When the lifecycle has already left
+   * `UNINITIALIZED` (authority already accepted), a later observation returns a
+   * truthful failure and never overwrites the winner.
+   */
+  private admitResolvedAuthority(providerKind: string, raw: unknown): AuthorityResult {
+    const result = normalizeProviderResult(raw, providerKind)
+    if (!result.ok) {
+      return result
+    }
+
+    const transitionResult = transition(this.currentState, 'OBSERVE_AUTHORITY')
+    if (!transitionResult.ok) {
+      this.lastResult = transitionResult
+      return authorityFailure('INVALID_AUTHORITY', 'authority is already accepted; a later observation cannot overwrite it')
+    }
+    this.currentState = transitionResult.to
+    this.acceptedAuthoritySnapshot = result.snapshot
+    this.lastResult = transitionResult
+    return result
+  }
+
+  /**
+   * Awaitable, cancellable authority observation. Resolves the provider
+   * synchronously or asynchronously, catches sync throws and async rejections,
+   * re-checks cancellation after the await and before admission, and admits the
+   * canonical frozen snapshot through the single shared admission boundary.
    *
-   * The provider's `resolve()` return is treated as untrusted runtime output:
-   * exceptions are caught, the result envelope is normalized, a success
-   * snapshot is re-validated through the canonical `validateAuthority()`, and
-   * the admitted snapshot's `source` must match the provider's nonblank `kind`.
-   * Any failure leaves both the lifecycle state and a previously accepted
-   * snapshot unchanged (fail closed), and a subsequent observation can never
-   * overwrite an already accepted snapshot.
+   * Cancellation is fail-closed: an aborted observation never admits authority
+   * and never overwrites an already accepted snapshot. A provider that ignores
+   * the signal still cannot unlock authority after the caller aborts.
    * @param provider - optional override; defaults to the configured provider.
+   * @param options - optional `signal` for cancellation.
    * @returns the normalized explicit success/failure result.
    */
-  observeAuthority(provider?: AuthorityProvider): AuthorityResult {
+  async observeAuthority(provider?: AuthorityProvider, options: AuthorityResolveOptions = {}): Promise<AuthorityResult> {
     const resolved = provider ?? this.provider
 
     const kind = resolved.kind
@@ -146,25 +207,32 @@ export class GovernanceService extends Service {
       return authorityFailure('INVALID_AUTHORITY', 'authority provider kind must be a non-blank string')
     }
 
+    const signal = options.signal
+    if (isAborted(signal)) {
+      return authorityFailure('INVALID_AUTHORITY', 'authority observation was aborted before it began')
+    }
+
+    // Do not invoke the provider once authority is already accepted.
+    if (this.acceptedAuthoritySnapshot !== null) {
+      return authorityFailure('INVALID_AUTHORITY', 'authority is already accepted; observation was not started')
+    }
+
     let raw: unknown
     try {
-      raw = resolved.resolve()
+      raw = await resolveWithAbort(resolved.resolve(options), signal)
     } catch {
-      return authorityFailure('INVALID_AUTHORITY', 'authority provider threw during resolve()')
+      if (isAborted(signal)) {
+        return authorityFailure('INVALID_AUTHORITY', 'authority observation was aborted during resolve()')
+      }
+      return authorityFailure('INVALID_AUTHORITY', 'authority provider threw or rejected during resolve()')
     }
 
-    const result = normalizeProviderResult(raw, kind)
-    if (!result.ok) {
-      return result
+    // Re-check cancellation after the await, before admission.
+    if (isAborted(signal)) {
+      return authorityFailure('INVALID_AUTHORITY', 'authority observation was aborted before admission')
     }
 
-    const transitionResult = transition(this.currentState, 'OBSERVE_AUTHORITY')
-    if (transitionResult.ok) {
-      this.currentState = transitionResult.to
-      this.acceptedAuthoritySnapshot = result.snapshot
-    }
-    this.lastResult = transitionResult
-    return result
+    return this.admitResolvedAuthority(kind, raw)
   }
 }
 

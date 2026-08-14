@@ -6,14 +6,13 @@ independently authorized tasks.
 
 ## Status
 
-**V0.6 governed-builder Skill.** V0 (bootstrap), V0.1 (governance core), V0.2
-(authority core), V0.3 (evidence core — durable reload upstream-blocked), V0.4
-(Bash runtime guard), and V0.5 (mutation guard expansion) are accepted. This
-stage adds the first public `governed-builder` Skill. The plugin is
-**authority-capable + evidence-recording + monotonic mutation-tool guard
-(`bash` / `write` / `edit`) + `governed-builder` Skill**; durable evidence reload
-remains upstream-blocked; path/Git/GitHub hard enforcement and the network
-authority provider remain future work.
+**V0.7 async authority resolution.** V0 (bootstrap), V0.1 (governance core),
+V0.2 (authority core), V0.3 (evidence core — durable reload upstream-blocked),
+V0.4 (Bash runtime guard), V0.5 (mutation guard expansion), and V0.6
+(governed-builder Skill) are accepted. This stage upgrades the authority
+resolution seam so a provider may resolve synchronously or asynchronously
+through a cancellable, fail-closed admission path; the built-in config provider
+remains synchronous and no GitHub/network provider ships yet.
 
 ## Design principle
 
@@ -65,6 +64,7 @@ tsdown.config.ts          # self-contained ESM transpile (the `prepare` build)
 | V0.3 | Evidence projection + flush | `project()` returns governance evidence in sequence order (fails closed on malformed recognized events); `flush()` delegates to the verified `ctx.sessions.flush()` checkpoint. |
 | V0.4–V0.5 | Runtime guard policy (`ctx.governanceGuard`) | A single monotonic `ctx.tools.guard()` denying the mutation-capable tools `bash`, `write`, and `edit` with no accepted authority or in a terminal state. Reads live governance state; not model-facing; never mutates arguments, parses Bash, or enforces paths. |
 | V0.6 | Governed builder Skill (`governed-builder`) | A runtime-registered, provider-neutral operating procedure for the Builder role. Behavioral guidance only; never advances the lifecycle, installs authority, or unlocks mutation. |
+| V0.7 | Async authority resolution | `AuthorityProvider.resolve()` may be synchronous or asynchronous (cancellable); `observeAuthority()` is awaitable, fail-closed on abort, and race-safe — at most one snapshot is ever admitted, with no replacement semantics. |
 
 ## Evidence events (V0.3)
 
@@ -124,6 +124,31 @@ authority fetching, and independent acceptance itself — is behavioral guidance
 
 Loading or invoking the Skill never advances the governance lifecycle, installs
 authority, or unlocks mutation. It adds no `SessionEvent` type.
+
+## Async authority resolution (V0.7)
+
+`AuthorityProvider.resolve(options?)` may now return a synchronous
+`AuthorityResult` or a `PromiseLike<AuthorityResult>`, and receives an optional
+`AbortSignal`. `GovernanceService.observeAuthority()` is awaitable and:
+
+- validates a nonblank `provider.kind` and an already-aborted signal **before**
+  invoking the provider;
+- catches synchronous throws and asynchronous rejections;
+- re-checks cancellation **after** the await and before admission, so a provider
+  that ignores the signal still cannot unlock authority after abort;
+- normalizes/revalidates the resolved value through the canonical
+  `normalizeProviderResult()` boundary;
+- admits at most one snapshot via the shared `OBSERVE_AUTHORITY` boundary.
+
+**Concurrency / no-replacement semantics:** the first observation to reach the
+admission boundary wins; any later (including concurrent-loser) observation
+returns a truthful structured failure and never overwrites the accepted
+snapshot. A provider is not invoked at all once authority is already accepted.
+There is no authority replacement/refresh in V0.7.
+
+The built-in `ConfigAuthorityProvider` remains synchronous, and the constructor
+performs a deterministic synchronous bootstrap through the same shared admission
+helper — no detached/background promise exists.
 
 ## Trust model (current boundary)
 

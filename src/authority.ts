@@ -54,11 +54,17 @@ export type AuthorityResult =
  * immutable snapshot on success, or a structured failure; unavailable/invalid
  * authority is fail-closed.
  */
+/** Options passed to {@link AuthorityProvider.resolve}. */
+export interface AuthorityResolveOptions {
+  /** Caller cancellation; a provider may ignore it (fail-closed is enforced at admission). */
+  readonly signal?: AbortSignal
+}
+
 export interface AuthorityProvider {
   /** Provider identity (e.g. "config", "github-issue"). */
   readonly kind: string
-  /** Resolve the current authority. */
-  resolve(): AuthorityResult
+  /** Resolve the current authority, synchronously or asynchronously. */
+  resolve(options?: AuthorityResolveOptions): AuthorityResult | PromiseLike<AuthorityResult>
 }
 
 /** Field names the snapshot model understands. */

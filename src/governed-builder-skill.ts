@@ -33,6 +33,8 @@ Keep this provider-neutral: GitHub is one example, not a hard dependency.
   status/diff/log through the protected \`bash\` tool still requires an accepted
   authority, because \`bash\` is gated regardless of the command it runs.
 - Do not attempt mutation when the runtime reports no accepted authority.
+- Authority resolution may be synchronous or asynchronous; mutation must wait
+  for **accepted** authority, never merely an in-progress fetch.
 - A governance runtime denial is final for that action: do not route around it
   through another tool, Code Mode, shell indirection, or retry tricks.
 - After BLOCKED, COMPLETED, or REVIEW_PENDING, stop mutation work.

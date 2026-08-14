@@ -1,6 +1,7 @@
 import {
   validateAuthority,
   type AuthorityProvider,
+  type AuthorityResolveOptions,
   type AuthorityResult,
 } from './authority.js'
 
@@ -22,7 +23,7 @@ export class ConfigAuthorityProvider implements AuthorityProvider {
    */
   constructor(private readonly raw: unknown) {}
 
-  resolve(): AuthorityResult {
+  resolve(_options?: AuthorityResolveOptions): AuthorityResult {
     return validateAuthority(this.raw)
   }
 }
