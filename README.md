@@ -13,14 +13,16 @@ with a `governed-builder` Skill for instruction-level guidance.
 
 ## Status
 
-**V0.4 runtime Bash guard.** V0 (bootstrap), V0.1 (governance core), V0.2
-(authority core), and V0.3 (evidence core — durable reload upstream-blocked)
-are accepted. This stage adds the first runtime-enforcing slice: a monotonic
-`ctx.tools.guard()` that denies DSH `bash` tool calls when there is no accepted
-authority or when governance is in a terminal state (`BLOCKED` / `COMPLETED` /
-`REVIEW_PENDING`). The project is now **authority-capable + evidence-recording
-+ first monotonic Bash runtime guard**; durable evidence reload remains
-upstream-blocked; Git/path/GitHub enforcement is not yet implemented. See
+**V0.5 mutation guard expansion.** V0 (bootstrap), V0.1 (governance core), V0.2
+(authority core), V0.3 (evidence core — durable reload upstream-blocked), and
+V0.4 (Bash runtime guard) are accepted. This stage extends the monotonic
+`ctx.tools.guard()` to gate the mutation-capable tools `bash`, `write`, and
+`edit` when there is no accepted authority or in a terminal state
+(`BLOCKED` / `COMPLETED` / `REVIEW_PENDING`), while read/discovery tools
+(`read`, `read_image`, `grep`, `glob`, …) remain available. The project is now
+**authority-capable + evidence-recording + monotonic mutation-tool guard
+(`bash` / `write` / `edit`)**; durable evidence reload remains upstream-blocked;
+path/Git/GitHub enforcement is not yet implemented. See
 [docs/architecture.md](docs/architecture.md).
 
 ## Evidence

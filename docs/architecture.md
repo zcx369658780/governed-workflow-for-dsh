@@ -6,14 +6,14 @@ independently authorized tasks.
 
 ## Status
 
-**V0.4 runtime Bash guard.** V0 (bootstrap), V0.1 (governance core), V0.2
-(authority core), and V0.3 (evidence core — durable reload upstream-blocked)
-are accepted. This stage adds the first runtime-enforcing slice: a monotonic
-`ctx.tools.guard()` denying DSH `bash` tool calls with no accepted authority or
-in a terminal governance state. The plugin is **authority-capable +
-evidence-recording + first monotonic Bash runtime guard**; durable evidence
-reload remains upstream-blocked; Git/path/GitHub enforcement is not yet
-implemented.
+**V0.5 mutation guard expansion.** V0 (bootstrap), V0.1 (governance core), V0.2
+(authority core), V0.3 (evidence core — durable reload upstream-blocked), and
+V0.4 (Bash runtime guard) are accepted. This stage extends the monotonic
+`ctx.tools.guard()` to gate `bash`, `write`, and `edit`. The plugin is
+**authority-capable + evidence-recording + monotonic mutation-tool guard
+(`bash` / `write` / `edit`), with read/discovery remaining available**; durable
+evidence reload remains upstream-blocked; path/Git/GitHub enforcement is not
+yet implemented.
 
 ## Design principle
 
@@ -62,7 +62,7 @@ tsdown.config.ts          # self-contained ESM transpile (the `prepare` build)
 | V0.3 | Governance evidence vocabulary | Merge-extensible `SessionEventMap` events: `governance/authority-observed`, `governance/authority-rejected`, `governance/lifecycle-transition`. Non-surface, append-only. |
 | V0.3 | Evidence recorder (`ctx.governanceEvidence`) | Appends canonical facts to an explicit `Session`; re-validates/sanitizes input; never records raw provider payloads. |
 | V0.3 | Evidence projection + flush | `project()` returns governance evidence in sequence order (fails closed on malformed recognized events); `flush()` delegates to the verified `ctx.sessions.flush()` checkpoint. |
-| V0.4 | Runtime guard policy (`ctx.governanceGuard`) | A monotonic `ctx.tools.guard()` denying DSH `bash` tool calls with no accepted authority or in a terminal state. Reads live governance state; not model-facing; never mutates arguments or parses Bash. |
+| V0.4–V0.5 | Runtime guard policy (`ctx.governanceGuard`) | A single monotonic `ctx.tools.guard()` denying the mutation-capable tools `bash`, `write`, and `edit` with no accepted authority or in a terminal state. Reads live governance state; not model-facing; never mutates arguments, parses Bash, or enforces paths. |
 
 ## Evidence events (V0.3)
 
@@ -76,26 +76,31 @@ tsdown.config.ts          # self-contained ESM transpile (the `prepare` build)
 All are non-surface (log-only): they are not in `SurfaceEventType`, so
 `Session.deriveMessages()` never projects them into model-visible history.
 
-## Runtime guard (V0.4)
+## Runtime guard (V0.5)
 
-The first runtime-enforcing slice uses the verified monotonic
-`ctx.tools.guard()` seam. Exactly one guard is registered (owned by its fiber,
-removed on unload) and, at each `bash` tool call, reads the live
-`ctx.governance` snapshot and applies:
+The runtime-enforcing slice uses the verified monotonic `ctx.tools.guard()`
+seam. Exactly one guard is registered (owned by its fiber, removed on unload)
+and, at each protected mutation-tool call, reads the live `ctx.governance`
+snapshot and applies:
 
 - no accepted authority → deny (`GOVERNANCE_DENY_NO_AUTHORITY`);
 - terminal state (`BLOCKED` / `COMPLETED` / `REVIEW_PENDING`) → deny
   (`GOVERNANCE_DENY_TERMINAL_STATE`);
 - non-terminal state with authority → no opinion (`undefined`).
 
-The exact V0.4 enforcement boundary:
+The exact V0.5 enforcement boundary:
 
-- protects DSH tool calls named `bash`;
-- requires an accepted authority and freezes Bash after terminal states;
-- does **not** parse Bash for Git semantics, protected-branch, path, `gh`, or
-  alias/wrapper/subprocess behavior;
+- protects DSH tool calls named `bash`, `write`, and `edit`;
+- requires an accepted authority and freezes these mutation tools after
+  terminal states;
+- **read/discovery tools (`read`, `read_image`, `grep`, `glob`, …) are not
+  gated** by this slice — absence of authority prevents mutation, not
+  observation;
+- does **not** enforce `allowedPaths` / path containment, and does not parse
+  Bash for Git semantics, protected-branch, `gh`, or alias/wrapper/subprocess
+  behavior;
 - does not claim to contain arbitrary same-process code;
-- does not yet protect filesystem-write tools or GitHub/MCP actions;
+- does not protect GitHub/MCP actions;
 - does not durably record guard decisions (deferred by the accepted upstream
   SessionEvent blocker) — the guard emits no new `governance/*` SessionEvent.
 
