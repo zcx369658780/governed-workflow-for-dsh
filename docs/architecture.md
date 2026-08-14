@@ -115,6 +115,17 @@ session log. `flush()` requests the verified `ctx.sessions.flush()` durability
 checkpoint, which only reaches storage if a persistence backend is installed;
 with no backend it resolves `false` and claims no disk durability.
 
+**Durable-reload capability boundary (upstream blocker).** The three governance
+evidence event types are out-of-repo and therefore outside the first-party
+generated `KNOWN_SESSION_EVENT_TYPES` set; `Session.append` exposes no way to
+set the envelope `ignorable` marker, and there is no public runtime
+registration surface for out-of-repo event types. The first-party
+`PersistenceCoordinator.assertEventsSupported()` therefore refuses a persisted
+log containing these events — even when this plugin is installed. In-memory
+append and direct `Session.create(seed)` replay work; first-party durable
+load/resume does not. This is recorded as a terminal upstream capability
+blocker (`BLOCKED_UPSTREAM_*`), not as a supported durable guarantee.
+
 ## How it plugs into DSH
 
 DSH composes a running tree from ordered `cordis.patch.yml` layers. This package

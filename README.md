@@ -29,9 +29,14 @@ Governance facts are appended to an explicit `Session` as non-surface events
 `governance/lifecycle-transition`). They add no model-visible message and are
 projected back in sequence order for audit/replay. Recording is append-only;
 `flush()` requests the DSH durability checkpoint (no-op without a persistence
-backend). Note: the current DSH `Session.append` cannot set `ignorable`, so a
-session containing these events is not reconstructable without this plugin —
-see [docs/dsh-compatibility.md](docs/dsh-compatibility.md).
+backend).
+
+**Durable-reload limitation:** current DSH exposes no way to mark these events
+`ignorable` and no public runtime registration for out-of-repo event types, so
+first-party persisted load/resume refuses a log containing them — **even when
+this plugin is installed**. In-memory append/replay works; durable reload is an
+upstream capability blocker. See
+[docs/dsh-compatibility.md](docs/dsh-compatibility.md).
 
 ## Install
 

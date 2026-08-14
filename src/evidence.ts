@@ -1,6 +1,6 @@
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { validateAuthority, type AuthorityErrorCode, type AuthoritySnapshot } from './authority.js'
-import { LIFECYCLE_ACTIONS, LIFECYCLE_STATES, type LifecycleAction, type LifecycleState } from './lifecycle.js'
+import { INVALID_TRANSITION, LIFECYCLE_ACTIONS, LIFECYCLE_STATES, nextState, type LifecycleAction, type LifecycleState } from './lifecycle.js'
 
 /**
  * Governance evidence vocabulary (V0.3). Merge-extensible `SessionEventMap`
@@ -58,6 +58,13 @@ export type GovernanceEventType =
 /** A session event narrowed to the governance evidence vocabulary. */
 export type GovernanceEvidenceEvent = SessionEvent<GovernanceEventType>
 
+/** The V0.3 governance event types this projector validates (fail-closed). */
+const RECOGNIZED_GOVERNANCE_TYPES: ReadonlySet<GovernanceEventType> = new Set([
+  'governance/authority-observed',
+  'governance/authority-rejected',
+  'governance/lifecycle-transition',
+])
+
 /** Upper bound for human-readable failure messages recorded as evidence. */
 const MAX_MESSAGE_LENGTH = 512
 
@@ -76,6 +83,12 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 /** Bound a failure message, truncating overlong strings. */
 function boundMessage(message: string): string {
   return message.length > MAX_MESSAGE_LENGTH ? `${message.slice(0, MAX_MESSAGE_LENGTH)}…` : message
+}
+
+/** True when the record has no own keys beyond the allowed set. */
+function ownKeysExactly(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+  const allowedSet = new Set(allowed)
+  return Object.keys(value).every(key => allowedSet.has(key))
 }
 
 function isLifecycleState(value: unknown): value is LifecycleState {
@@ -160,12 +173,15 @@ export function buildLifecycleTransitionPayload(input: unknown): LifecycleTransi
     if (!isLifecycleState(to)) {
       throw new Error('governance evidence: lifecycle-transition success requires a valid to state')
     }
+    if (nextState(from, action) !== to) {
+      throw new Error(`governance evidence: lifecycle-transition claims an impossible transition ${from} --${action}--> ${to}`)
+    }
     return Object.freeze({ schemaVersion: EVIDENCE_SCHEMA_VERSION, from, action, ok: true as const, to })
   }
 
   const error = input.error
-  if (!isPlainRecord(error) || !isNonBlankString(error.code) || !isNonBlankString(error.message)) {
-    throw new Error('governance evidence: lifecycle-transition failure requires non-blank error code and message')
+  if (!isPlainRecord(error) || error.code !== INVALID_TRANSITION || !isNonBlankString(error.message)) {
+    throw new Error('governance evidence: lifecycle-transition failure requires code INVALID_TRANSITION and a non-blank message')
   }
   return Object.freeze({
     schemaVersion: EVIDENCE_SCHEMA_VERSION,
@@ -178,11 +194,13 @@ export function buildLifecycleTransitionPayload(input: unknown): LifecycleTransi
 
 function isAuthorityObservedData(value: unknown): value is AuthorityObservedEventData {
   if (!isPlainRecord(value) || value.schemaVersion !== EVIDENCE_SCHEMA_VERSION) return false
+  if (!ownKeysExactly(value, ['schemaVersion', 'authority'])) return false
   return validateAuthority(value.authority).ok
 }
 
 function isAuthorityRejectedData(value: unknown): value is AuthorityRejectedEventData {
   if (!isPlainRecord(value) || value.schemaVersion !== EVIDENCE_SCHEMA_VERSION) return false
+  if (!ownKeysExactly(value, ['schemaVersion', 'providerKind', 'code', 'field', 'message'])) return false
   const code = value.code
   if (code !== 'AUTHORITY_UNAVAILABLE' && code !== 'INVALID_AUTHORITY') return false
   if (!isNonBlankString(value.message)) return false
@@ -194,9 +212,16 @@ function isAuthorityRejectedData(value: unknown): value is AuthorityRejectedEven
 function isLifecycleTransitionData(value: unknown): value is LifecycleTransitionEventData {
   if (!isPlainRecord(value) || value.schemaVersion !== EVIDENCE_SCHEMA_VERSION) return false
   if (!isLifecycleState(value.from) || !isLifecycleAction(value.action)) return false
-  if (value.ok === true) return isLifecycleState(value.to)
+  if (value.ok === true) {
+    if (!ownKeysExactly(value, ['schemaVersion', 'from', 'action', 'ok', 'to'])) return false
+    if (!isLifecycleState(value.to)) return false
+    return nextState(value.from, value.action) === value.to
+  }
   if (value.ok === false) {
-    return isPlainRecord(value.error) && isNonBlankString(value.error.code) && isNonBlankString(value.error.message)
+    if (!ownKeysExactly(value, ['schemaVersion', 'from', 'action', 'ok', 'error'])) return false
+    const error = value.error
+    if (!isPlainRecord(error) || !ownKeysExactly(error, ['code', 'message'])) return false
+    return error.code === INVALID_TRANSITION && isNonBlankString(error.message)
   }
   return false
 }
@@ -217,13 +242,15 @@ export function isGovernanceEvidenceEvent(event: SessionEvent): event is Governa
 
 /**
  * Project a session's raw append-only events down to governance evidence in
- * sequence order, ignoring unrelated events. A recognized governance event
- * with malformed data fails closed (throws) rather than fabricating facts.
+ * sequence order, ignoring unrelated events (including future/unknown
+ * `governance/*` types, which this V0.3 projector does not yet own). Only the
+ * recognized V0.3 types are validated, and a recognized event with malformed
+ * data fails closed (throws) rather than fabricating facts.
  */
 export function projectEvidence(events: readonly SessionEvent[]): GovernanceEvidenceEvent[] {
   const result: GovernanceEvidenceEvent[] = []
   for (const event of events) {
-    if (!(typeof event.type === 'string' && event.type.startsWith('governance/'))) continue
+    if (!(typeof event.type === 'string' && RECOGNIZED_GOVERNANCE_TYPES.has(event.type as GovernanceEventType))) continue
     if (!isGovernanceEvidenceEvent(event)) {
       throw new Error(`governance evidence: malformed ${event.type} event at seq ${event.seq}`)
     }

@@ -89,4 +89,46 @@ describe('evidence projection', () => {
     const turn = session.append('turn/start', { turn: 1 })
     expect(isGovernanceEvidenceEvent(turn)).toBe(false)
   })
+
+  it('ignores unknown/future governance event types during projection', () => {
+    const session = Session.create(SessionId('p5'), [
+      { type: 'governance/authority-observed', seq: 0, time: 1, data: buildAuthorityObservedPayload(VALID_AUTHORITY) } as unknown as SessionEvent,
+      { type: 'governance/tool-decision', seq: 1, time: 2, data: { decision: 'allow' } } as unknown as SessionEvent,
+    ])
+    const projected = projectEvidence(session.events)
+    expect(projected).toHaveLength(1)
+    expect(projected[0]?.type).toBe('governance/authority-observed')
+  })
+
+  it('rejects contradictory lifecycle evidence on replay (success + error, failure + to)', () => {
+    const contradictory = { schemaVersion: 1, from: 'UNINITIALIZED', action: 'OBSERVE_AUTHORITY', ok: true, to: 'AUTHORITY_OBSERVED', error: { code: 'INVALID_TRANSITION', message: 'x' } }
+    const session = Session.create(SessionId('p6'), [{ type: 'governance/lifecycle-transition', seq: 0, time: 1, data: contradictory } as unknown as SessionEvent])
+    expect(() => projectEvidence(session.events)).toThrow(/malformed/)
+
+    const failureWithTo = { schemaVersion: 1, from: 'RUNNING', action: 'SUBMIT_REVIEW', ok: false, to: 'REVIEW_PENDING', error: { code: 'INVALID_TRANSITION', message: 'x' } }
+    const session2 = Session.create(SessionId('p6b'), [{ type: 'governance/lifecycle-transition', seq: 0, time: 1, data: failureWithTo } as unknown as SessionEvent])
+    expect(() => projectEvidence(session2.events)).toThrow(/malformed/)
+  })
+
+  it('rejects impossible transition claims on replay', () => {
+    const impossible = { schemaVersion: 1, from: 'UNINITIALIZED', action: 'RUN', ok: true, to: 'REVIEW_PENDING' }
+    const session = Session.create(SessionId('p7'), [{ type: 'governance/lifecycle-transition', seq: 0, time: 1, data: impossible } as unknown as SessionEvent])
+    expect(() => projectEvidence(session.events)).toThrow(/malformed/)
+  })
+
+  it('rejects unknown own fields in recognized evidence on replay', () => {
+    const extraTransition = { schemaVersion: 1, from: 'UNINITIALIZED', action: 'OBSERVE_AUTHORITY', ok: true, to: 'AUTHORITY_OBSERVED', secret: true }
+    const session = Session.create(SessionId('p8'), [{ type: 'governance/lifecycle-transition', seq: 0, time: 1, data: extraTransition } as unknown as SessionEvent])
+    expect(() => projectEvidence(session.events)).toThrow(/malformed/)
+
+    const extraAuthority = { schemaVersion: 1, authority: VALID_AUTHORITY, secret: true }
+    const session2 = Session.create(SessionId('p8b'), [{ type: 'governance/authority-observed', seq: 0, time: 1, data: extraAuthority } as unknown as SessionEvent])
+    expect(() => projectEvidence(session2.events)).toThrow(/malformed/)
+  })
+
+  it('rejects a failure lifecycle event whose error code is not INVALID_TRANSITION', () => {
+    const badCode = { schemaVersion: 1, from: 'RUNNING', action: 'SUBMIT_REVIEW', ok: false, error: { code: 'SOMETHING_ELSE', message: 'x' } }
+    const session = Session.create(SessionId('p9'), [{ type: 'governance/lifecycle-transition', seq: 0, time: 1, data: badCode } as unknown as SessionEvent])
+    expect(() => projectEvidence(session.events)).toThrow(/malformed/)
+  })
 })

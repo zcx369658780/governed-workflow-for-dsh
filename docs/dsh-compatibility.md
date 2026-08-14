@@ -50,14 +50,19 @@ the `ignorable` envelope marker — matches the checkout).
   checkout revision; the npm `@deepseek-ai/dsh-session@0.1.0-rc.6` types match
   the checkout's session API (including `ignorable`). Compatibility claims are
   not silently broadened beyond these two tested surfaces.
-- **`ignorable` is not settable via `Session.append`.** The envelope supports an
-  `ignorable: true` marker (for readers that do not recognize an event type),
-  but `Session.append` writes only `type`/`seq`/`time`/`data`; there is no append
-  option to set it, and the out-of-repo event registration surface is deferred
-  upstream (`KNOWN_SESSION_EVENT_TYPES` comment). Governance evidence events are
-  therefore unmarked (required), so a session containing them is **not**
-  reconstructable by a harness that does not have this plugin installed. This is
-  a documented current limitation, not a false ignorable claim.
+- **`ignorable` is not settable via `Session.append`; first-party durable reload
+  is an upstream blocker.** The envelope supports an `ignorable: true` marker,
+  but `Session.append` writes only `type`/`seq`/`time`/`data` with no option to
+  set it, and there is no public runtime registration surface for out-of-repo
+  event types (`KNOWN_SESSION_EVENT_TYPES` is a generated first-party set; its
+  comment defers out-of-repo registration). `PersistenceCoordinator.
+  assertEventsSupported()` (verified in `session-persistence/src/coordinator.ts`)
+  refuses any stored event where `!KNOWN_SESSION_EVENT_TYPES.has(type) &&
+  event.ignorable !== true`, throwing `SessionFormatUnsupportedError`.
+  Consequently governance evidence events can be appended, flushed, and replayed
+  through the direct `Session.create(seed)` path, but a **first-party persisted
+  load/resume refuses the log even when this plugin is installed**. This is a
+  current upstream capability blocker, not a false ignorable claim.
 - **Git installs require a `prepare` allowlist.** pnpm ≥10 refuses to run a git
   dependency's `prepare` script until the consumer adds the package key to the
   profile's `pnpm-workspace.yaml` under `allowBuilds`.
