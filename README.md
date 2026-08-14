@@ -13,17 +13,27 @@ with a `governed-builder` Skill for instruction-level guidance.
 
 ## Status
 
-**V0.5 mutation guard expansion.** V0 (bootstrap), V0.1 (governance core), V0.2
-(authority core), V0.3 (evidence core — durable reload upstream-blocked), and
-V0.4 (Bash runtime guard) are accepted. This stage extends the monotonic
-`ctx.tools.guard()` to gate the mutation-capable tools `bash`, `write`, and
-`edit` when there is no accepted authority or in a terminal state
-(`BLOCKED` / `COMPLETED` / `REVIEW_PENDING`), while read/discovery tools
-(`read`, `read_image`, `grep`, `glob`, …) remain available. The project is now
-**authority-capable + evidence-recording + monotonic mutation-tool guard
-(`bash` / `write` / `edit`)**; durable evidence reload remains upstream-blocked;
-path/Git/GitHub enforcement is not yet implemented. See
-[docs/architecture.md](docs/architecture.md).
+**V0.6 governed-builder Skill.** V0 (bootstrap), V0.1 (governance core), V0.2
+(authority core), V0.3 (evidence core — durable reload upstream-blocked), V0.4
+(Bash runtime guard), and V0.5 (mutation guard expansion) are accepted. This
+stage adds the first public `governed-builder` Skill: a runtime-registered,
+provider-neutral operating procedure for a repository Builder working under
+externally supplied task authority. The project is now **authority-capable +
+evidence-recording + monotonic mutation-tool guard (`bash` / `write` / `edit`) +
+`governed-builder` Skill**; durable evidence reload remains upstream-blocked;
+path/Git/GitHub hard enforcement and the network authority provider remain
+future work. See [docs/architecture.md](docs/architecture.md).
+
+## Skill vs runtime plugin
+
+- **`governed-builder` Skill** is the *behavioral operating procedure* — the
+  guidance a Builder follows (authority refresh, read-before-mutate, fail-closed
+  `BLOCKED`, independent review, evidence reporting). It is model/user-loadable
+  instructions, **not** an authority boundary and **not** a SessionEvent.
+- **Runtime plugins** (`ctx.governanceGuard`, `ctx.governance`,
+  `ctx.governanceEvidence`) enforce *non-bypassable invariants*. Loading or
+  invoking the Skill never advances the lifecycle, installs authority, or
+  unlocks mutation.
 
 ## Evidence
 
