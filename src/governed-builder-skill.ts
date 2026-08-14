@@ -26,8 +26,12 @@ Keep this provider-neutral: GitHub is one example, not a hard dependency.
 
 ## Read/discovery vs mutation
 
-- Read/discovery (read, read_image, grep, glob, search, git status/diff/log) may
-  be used to re-establish current truth even before mutation authority.
+- Read/discovery tool names the guard does not gate (read, read_image, grep,
+  glob, search, and other non-mutation tools) may be used to re-establish
+  current truth even before mutation authority.
+- The guard is tool-name based, not command-semantics based: running git
+  status/diff/log through the protected \`bash\` tool still requires an accepted
+  authority, because \`bash\` is gated regardless of the command it runs.
 - Do not attempt mutation when the runtime reports no accepted authority.
 - A governance runtime denial is final for that action: do not route around it
   through another tool, Code Mode, shell indirection, or retry tricks.

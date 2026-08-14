@@ -49,6 +49,17 @@ describe('governed-builder skill content (semantic)', () => {
     expect(content).toContain('runtime denial is final')
     expect(content).toContain('do not route around it')
   })
+
+  it('states the pre-authority read/discovery truth precisely', () => {
+    // Ungated read/discovery tools are usable before authority.
+    expect(content).toContain('tool names the guard does not gate')
+    expect(content).toContain('even before mutation authority')
+    // But git status/diff/log through the gated bash tool still needs authority
+    // (the guard is tool-name based, not command-semantics based).
+    expect(content).toContain('tool-name based, not command-semantics based')
+    expect(content).toContain('status/diff/log through the protected')
+    expect(content).toContain('still requires an accepted')
+  })
 })
 
 describe('governed-builder skill registration (real ctx.skills)', () => {

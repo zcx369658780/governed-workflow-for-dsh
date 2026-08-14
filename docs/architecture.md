@@ -22,8 +22,8 @@ authority provider remain future work.
 
 The governed workflow is split along this line from the start:
 
-- **Skills** (natural-language instruction, future `governed-builder`) tell the
-  agent *how to behave* — guidance the model reads and follows.
+- **Skills** (natural-language instruction, the `governed-builder` Skill) tell
+  the agent *how to behave* — guidance the model reads and follows.
 - **Runtime plugins** (this package, via Cordis) enforce *invariants that
   cannot be skipped by prompt* — authority resolution, tool guards, and
   evidence capture that hold regardless of what the model is told.
@@ -35,7 +35,7 @@ everything that is a judgment call belongs in the Skill.
 
 ```
 package.json              # declares dsh.bundle.patch -> cordis.patch.yml
-cordis.patch.yml          # mounts the governance + evidence + guard services
+cordis.patch.yml          # mounts the governance + evidence + guard + skill services
 src/index.ts              # package entry: default-exports GovernanceService
 src/lifecycle.ts          # pure lifecycle state machine
 src/authority.ts          # authority model, runtime validation, provider contract
@@ -43,9 +43,10 @@ src/config-provider.ts    # config-backed reference provider (offline)
 src/governance.ts         # GovernanceService (ctx.governance) + authority integration
 src/evidence.ts           # governance SessionEventMap events, validation, projection
 src/evidence-service.ts   # GovernanceEvidenceService (ctx.governanceEvidence)
-src/guard.ts              # pure V0.4 runtime guard policy evaluator
+src/guard.ts              # pure runtime guard policy evaluator (V0.4/V0.5)
 src/guard-service.ts      # GovernanceToolGuardService (ctx.governanceGuard)
-test/*.spec.ts            # offline lifecycle/authority/evidence/guard tests + real-Context tests
+src/governed-builder-skill.ts  # governed-builder Skill registration
+test/*.spec.ts            # offline lifecycle/authority/evidence/guard/skill tests + real-Context tests
 tsdown.config.ts          # self-contained ESM transpile (the `prepare` build)
 ```
 
@@ -145,10 +146,9 @@ authority, or unlocks mutation. It adds no `SessionEvent` type.
 | Module | Responsibility (future) |
 |---|---|
 | GitHub Issue / network authority provider | Fetch authority from GitHub; implements the same `AuthorityProvider` contract. |
-| Broader Git/path hard enforcement | Extend the V0.4 monotonic guard beyond the `bash` tool name to Git/path/GitHub semantics and Bash-command parsing. |
+| Broader Git/path hard enforcement | Extend the V0.5 monotonic guard beyond the `bash`/`write`/`edit` tool names to Git/path/GitHub semantics and Bash-command parsing. |
 | Guard allow/deny evidence events | Durable tool-policy decision recording once an upstream-compatible event path exists. |
 | Approval integration | Read-only policy advice and approval surfaces. |
-| `governed-builder` Skill | Instruction-level guidance for agents acting as the builder role. |
 | Policy profiles (`strict`, `standard`, `fast`) | Named compositions selectable per session. |
 | Reviewer orchestration / successor automation | Multi-agent review and automatic successor creation. |
 | Release / npm publication | Publishing automation. |
@@ -184,24 +184,27 @@ blocker (`BLOCKED_UPSTREAM_*`), not as a supported durable guarantee.
 DSH composes a running tree from ordered `cordis.patch.yml` layers. This package
 is a **bundle**: its `package.json` declares `dsh.bundle.patch`, so `dsh plugin
 --profile <name> add dsh-governed-workflow` joins the layer stack and its patch
-inserts three rows — `governed-workflow` (the `GovernanceService`),
-`governed-workflow-evidence` (the `GovernanceEvidenceService`), and
-`governed-workflow-guard` (the `GovernanceToolGuardService`).
+inserts four rows — `governed-workflow` (the `GovernanceService`),
+`governed-workflow-evidence` (the `GovernanceEvidenceService`),
+`governed-workflow-guard` (the `GovernanceToolGuardService`), and
+`governed-workflow-skill` (the `GovernedBuilderSkill`).
 
 ## Non-goals for the current task
 
-- GitHub REST/GraphQL/`gh` authority fetching;
-- network clients or credentials;
-- Git/path enforcement and Bash command semantics parsing (the V0.4 guard only
-  gates the `bash` tool name; it never parses Git/path/`gh` intent);
-- durable guard-decision evidence (deferred by the accepted upstream
+- GitHub Issue/network authority provider;
+- protected-branch Git runtime enforcement;
+- `allowedPaths` / canonical path enforcement;
+- new filesystem interception policy;
+- Bash/Git command parsing (the guard gates tool names, not command semantics);
+- GitHub merge/close/successor runtime enforcement;
+- durable guard-decision SessionEvents (deferred by the accepted upstream
   SessionEvent blocker);
+- workaround for the V0.3 durable-reload blocker;
 - approval workflows;
-- model-facing governance tools;
-- `governed-builder` Skill;
+- automatic lifecycle admission/run transitions;
 - policy profiles;
 - reviewer/multi-agent orchestration;
-- automatic successor creation;
-- release/npm publish automation;
+- successor automation;
+- release/npm publication;
 - persistence backend;
 - dashboard/custom UI.
