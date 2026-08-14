@@ -3,9 +3,12 @@
  *
  * The default export is the Cordis `GovernanceService` class; the bundle row
  * `name: dsh-governed-workflow` mounts it as a class plugin, providing
- * `ctx.governance`. The lifecycle vocabulary is re-exported for in-repo
- * consumers and future governance modules (authority/guard/evidence).
+ * `ctx.governance`. The lifecycle vocabulary, authority model/validation, and
+ * the config-backed provider are re-exported for in-repo consumers and future
+ * governance modules (authority/guard/evidence).
  */
 export { default } from './governance.js'
 export * from './governance.js'
 export * from './lifecycle.js'
+export * from './authority.js'
+export * from './config-provider.js'

@@ -6,11 +6,13 @@ independently authorized tasks.
 
 ## Status
 
-**V0.1 governance core.** The V0 bootstrap skeleton (Issue #1 / PR #2) was
-accepted. This task adds the first real runtime primitive: a pure, fail-closed
-builder-side lifecycle state machine and a typed `governance` Cordis service.
-There is still **no** authority provider, tool guard, session evidence, Skill,
-or policy profile — the plugin is not yet governance-enforcing.
+**V0.2 authority core.** The V0 bootstrap skeleton (Issue #1) and the V0.1
+governance core (Issue #3) are accepted. This stage adds the first trustworthy
+authority capability — a provider-neutral contract, a runtime-validated
+immutable authority snapshot, and a config-backed reference provider — and
+integrates it with the governance service. The plugin is **authority-capable,
+not yet tool-enforcing**: it observes and records an authority but enforces
+nothing on tool calls.
 
 ## Design principle
 
@@ -31,60 +33,89 @@ everything that is a judgment call belongs in the Skill.
 ## Current structure
 
 ```
-package.json           # declares dsh.bundle.patch -> cordis.patch.yml
-cordis.patch.yml       # the bundle layer: inserts the governed-workflow row
-src/index.ts           # package entry: default-exports GovernanceService
-src/lifecycle.ts       # pure, Cordis-independent lifecycle state machine
-src/governance.ts      # typed GovernanceService (ctx.governance, declaration merging)
-test/lifecycle.spec.ts # offline state-machine tests
-test/governance.spec.ts# service load/transition/disposal tests (real Context)
-tsdown.config.ts       # self-contained ESM transpile (the `prepare` build)
+package.json             # declares dsh.bundle.patch -> cordis.patch.yml
+cordis.patch.yml         # the bundle layer: inserts the governed-workflow row
+src/index.ts             # package entry: default-exports GovernanceService
+src/lifecycle.ts         # pure, Cordis-independent lifecycle state machine
+src/authority.ts         # authority model, runtime validation, provider contract
+src/config-provider.ts   # config-backed reference provider (offline)
+src/governance.ts        # GovernanceService (ctx.governance) + authority integration
+test/*.spec.ts           # offline lifecycle/authority tests + real-Context service tests
+tsdown.config.ts         # self-contained ESM transpile (the `prepare` build)
 ```
 
-## Implemented (V0.1)
+## Implemented
 
-| Module | Responsibility |
-|---|---|
-| Lifecycle state machine | Pure, deterministic builder-side states `UNINITIALIZED → AUTHORITY_OBSERVED → TASK_ADMITTED → RUNNING → BLOCKED \| COMPLETED → REVIEW_PENDING`. Invalid transitions fail closed. There is no builder-authorized `ACCEPTED`. |
-| Governance Service (`ctx.governance`) | A Cordis service exposing a safely-copied snapshot and authorized transitions through the state machine. Not a model-facing tool. |
+| Version | Module | Responsibility |
+|---|---|---|
+| V0.1 | Lifecycle state machine | Pure, deterministic builder-side states `UNINITIALIZED → AUTHORITY_OBSERVED → TASK_ADMITTED → RUNNING → BLOCKED \| COMPLETED → REVIEW_PENDING`. Invalid transitions fail closed; no builder-authorized `ACCEPTED`. |
+| V0.1 | Governance Service (`ctx.governance`) | Holds the lifecycle, a safely-copied snapshot, and authorized transitions. Not a model-facing tool. |
+| V0.2 | Authority model + validation | Provider-neutral `AuthoritySnapshot`; `validateAuthority()` rejects missing/invalid fields, unknown keys, malformed arrays, and prototype-chain tricks, and returns a deeply frozen snapshot. No secrets/tokens. |
+| V0.2 | Authority Provider contract | `AuthorityProvider` with explicit success/failure `resolve()`; the governance core depends on the contract, never a concrete provider. |
+| V0.2 | Config-backed reference provider | Offline provider whose authority is supplied via DSH plugin configuration. Deterministic, credential-free, and never embeds personal paths/tokens. |
+| V0.2 | Governance authority integration | `observeAuthority()` resolves through the provider and advances `UNINITIALIZED → AUTHORITY_OBSERVED` only on valid resolution; failure leaves state and the accepted snapshot unchanged. |
+
+## Trust model (current boundary)
+
+- **Model and tool calls are untrusted inputs.** Anything the model passes into
+  governance is treated as untrusted and runtime-validated.
+- **Authority/config/provider outputs must be runtime validated.** TypeScript
+  types are not a trust boundary; `validateAuthority()` performs the checks.
+- **Same-process third-party plugins with arbitrary JavaScript execution are
+  not assumed hostile in V0.x.** Code granted arbitrary in-process execution
+  can subvert the process itself, so V0.2 does not claim to stop it.
+- **Future runtime guards protect agent/tool behavior**, not malicious code
+  already granted arbitrary in-process execution.
 
 ## Reserved for later tasks (not implemented)
 
-Each of these is a future, independently authorized task; the current task must
-not start them.
-
 | Module | Responsibility (future) |
 |---|---|
-| Authority Provider abstraction | A seam that answers "what is the single authoritative task right now?" with pluggable backends. The abstraction may bind Git state (branch/SHA) to a task source; the exact semantics are **not yet implemented or frozen**. |
-| Initial `git-main` authority provider | A concrete provider that resolves the authoritative task from Git state and a task source (e.g. a GitHub issue). Its exact behavior is not yet defined. |
-| Soft policy / approval integration | Read-only policy advice and approval surfaces that consult the permission service. |
-| Monotonic hard tool guard | Enforce non-bypassable, monotonic rules (e.g. never push to `main`, never self-accept) regardless of prompt. |
-| Durable governance session events / evidence observer | Append governance facts (authority snapshot, guard decisions, artifacts) to the DSH session log. |
+| GitHub Issue / network authority provider | Fetch authority from GitHub REST/GraphQL/`gh`; implements the same `AuthorityProvider` contract without changing the governance core. |
+| Monotonic hard tool guard / `tools/pre-execute` policy | Enforce non-bypassable rules regardless of prompt. |
+| Approval integration | Read-only policy advice and approval surfaces. |
+| Durable governance SessionEvent evidence | Append governance facts to the DSH session log. |
 | `governed-builder` Skill | Instruction-level guidance for agents acting as the builder role. |
-| Policy profiles (`strict`, `standard`, `fast`) | Named compositions of the above, selectable per session. |
-| GitHub API automation | Issue/PR clients and task-source automation. |
+| Policy profiles (`strict`, `standard`, `fast`) | Named compositions selectable per session. |
+| Reviewer orchestration / successor automation | Multi-agent review and automatic successor creation. |
+| Release / npm publication | Publishing automation. |
 
 ## How it plugs into DSH
 
 DSH composes a running tree from ordered `cordis.patch.yml` layers. This package
-is a **bundle**: its `package.json` declares `dsh.bundle.patch`, so when a user
-runs `dsh plugin --profile <name> add dsh-governed-workflow` (from npm or
-`github:...`), the bundle joins the profile's layer stack and its patch inserts
-the `governed-workflow` row. That row mounts the package's default export — the
-`GovernanceService` class — which registers itself as `ctx.governance`. Loading
-order and override semantics follow the
-[DSH publish guide](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/user/develop/basic/publish.md).
+is a **bundle**: its `package.json` declares `dsh.bundle.patch`, so `dsh plugin
+--profile <name> add dsh-governed-workflow` joins the layer stack and its patch
+inserts the `governed-workflow` row. That row mounts the package's default
+export — the `GovernanceService` class — registering `ctx.governance`.
+
+The config-backed authority is supplied through the row's `config` (or a user
+profile/`--patch` override by row id):
+
+```yaml
+- id: governed-workflow
+  config:
+    authority:
+      taskId: issue-5
+      source: config
+      repository: owner/repo
+      baselineRef: main
+      baselineSha: 0123456789abcdef0123456789abcdef01234567
+```
+
+A valid authority is observed at load (`UNINITIALIZED → AUTHORITY_OBSERVED`);
+unavailable/invalid authority fails closed and leaves the lifecycle unchanged.
 
 ## Non-goals for the current task
 
-- GitHub Issue/PR API clients;
-- Authority Provider or `git-main` provider behavior;
-- shell/Git/path policy enforcement;
-- `tools/pre-execute` policy or monotonic `ctx.tools.guard()` rules;
+- GitHub REST/GraphQL/`gh` authority fetching;
+- network clients or credentials;
+- Git/path/shell tool enforcement;
+- `tools/pre-execute` or monotonic `ctx.tools.guard()` policy;
 - approval workflows;
-- durable governance SessionEvent evidence;
+- durable SessionEvent evidence;
+- model-facing governance tools;
 - `governed-builder` Skill;
-- strict/standard/fast profiles;
+- policy profiles;
 - reviewer/multi-agent orchestration;
 - automatic successor creation;
 - release/npm publish automation;

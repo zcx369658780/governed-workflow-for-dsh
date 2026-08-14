@@ -1,17 +1,29 @@
 import { Context, Service } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
+import type Schema from '@deepseek-ai/schemastery'
 import {
   transition,
   type LifecycleAction,
   type LifecycleResult,
   type LifecycleState,
 } from './lifecycle.js'
+import type { AuthorityProvider, AuthorityResult, AuthoritySnapshot } from './authority.js'
+import { ConfigAuthorityProvider } from './config-provider.js'
 
-/** Immutable snapshot of the governance core's current lifecycle state. */
+/** Plugin configuration for the governance service. */
+export interface GovernanceConfig {
+  /** Raw authority snapshot config for the reference provider (runtime-validated). */
+  authority?: unknown
+}
+
+/** Immutable snapshot of the governance core's current state. */
 export interface GovernanceSnapshot {
   /** The current builder-side lifecycle state. */
   readonly state: LifecycleState
-  /** The last transition result (already immutable), or null before any transition. */
+  /** The last lifecycle transition result (immutable), or null before any transition. */
   readonly lastResult: LifecycleResult | null
+  /** The accepted authority snapshot (immutable), or null before a successful observation. */
+  readonly authority: AuthoritySnapshot | null
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -22,37 +34,56 @@ declare module '@deepseek-ai/cordis' {
 
 /**
  * The trusted state core for `dsh-governed-workflow`: a Cordis service holding
- * the builder-side lifecycle. Later authority, guard, and evidence plugins
- * depend on this service; V0.1 exposes only a snapshot and authorized
- * transitions — it is **not** a model-facing tool, and it implements no
- * shell/Git/path policy, no authority parsing, and no durable session events.
+ * the builder-side lifecycle and the accepted authority. V0.2 adds the
+ * authority capability — a provider-neutral contract plus a config-backed
+ * reference provider — while still enforcing nothing on tool calls.
  */
 export class GovernanceService extends Service {
+  static Config: Schema<GovernanceConfig> = z.object({
+    authority: z.any(),
+  })
+
   private currentState: LifecycleState = 'UNINITIALIZED'
   private lastResult: LifecycleResult | null = null
+  private acceptedAuthoritySnapshot: AuthoritySnapshot | null = null
+  private readonly provider: AuthorityProvider
 
   /**
    * Create and register the service on `ctx.governance`. Registration is
    * performed by the Cordis `Service` base and is automatically undone when
    * the owning fiber unloads.
    * @param ctx - Cordis context that owns the service.
+   * @param config - validated plugin configuration.
    */
-  constructor(ctx: Context) {
+  constructor(ctx: Context, config: GovernanceConfig = {}) {
     super(ctx, 'governance')
-    // Load marker the DSH load smoke test observes.
+    this.provider = new ConfigAuthorityProvider(config.authority)
     console.log('[governed-workflow] governance service loaded')
+
+    // Observe the config-backed authority at load time (fail-closed when
+    // unavailable/invalid). A valid authority advances to AUTHORITY_OBSERVED.
+    const observed = this.observeAuthority()
+    if (observed.ok) {
+      console.log(`[governed-workflow] authority observed: ${observed.snapshot.taskId}`)
+    } else {
+      console.log(`[governed-workflow] authority ${observed.error.code}`)
+    }
   }
 
   /** Return a freshly built, safely copied view of the current state. */
   snapshot(): GovernanceSnapshot {
-    return { state: this.currentState, lastResult: this.lastResult }
+    return { state: this.currentState, lastResult: this.lastResult, authority: this.acceptedAuthoritySnapshot }
+  }
+
+  /** The accepted authority snapshot, or null before a successful observation. */
+  acceptedAuthority(): AuthoritySnapshot | null {
+    return this.acceptedAuthoritySnapshot
   }
 
   /**
    * Apply an authorized lifecycle action through the pure state machine.
    * Invalid actions fail closed: the result reports the error and the current
-   * state is left untouched. The returned result is immutable and suitable for
-   * later durable evidence capture.
+   * state is left untouched.
    * @param action - the lifecycle action to apply.
    * @returns the transition result.
    */
@@ -62,6 +93,31 @@ export class GovernanceService extends Service {
       this.currentState = result.to
     }
     this.lastResult = result
+    return result
+  }
+
+  /**
+   * Resolve authority through the provider abstraction and, only on success,
+   * advance `UNINITIALIZED -> AUTHORITY_OBSERVED` and record the accepted
+   * immutable snapshot. Resolution/validation failure leaves both the lifecycle
+   * state and any previously accepted snapshot unchanged (fail closed); a
+   * subsequent observation can never overwrite an already accepted snapshot.
+   * @param provider - optional override; defaults to the configured provider.
+   * @returns the provider's explicit success/failure result.
+   */
+  observeAuthority(provider?: AuthorityProvider): AuthorityResult {
+    const result = (provider ?? this.provider).resolve()
+
+    if (!result.ok) {
+      return result
+    }
+
+    const transitionResult = transition(this.currentState, 'OBSERVE_AUTHORITY')
+    if (transitionResult.ok) {
+      this.currentState = transitionResult.to
+      this.acceptedAuthoritySnapshot = result.snapshot
+    }
+    this.lastResult = transitionResult
     return result
   }
 }
