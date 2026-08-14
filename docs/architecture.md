@@ -6,14 +6,14 @@ independently authorized tasks.
 
 ## Status
 
-**V0.5 mutation guard expansion.** V0 (bootstrap), V0.1 (governance core), V0.2
-(authority core), V0.3 (evidence core — durable reload upstream-blocked), and
-V0.4 (Bash runtime guard) are accepted. This stage extends the monotonic
-`ctx.tools.guard()` to gate `bash`, `write`, and `edit`. The plugin is
+**V0.6 governed-builder Skill.** V0 (bootstrap), V0.1 (governance core), V0.2
+(authority core), V0.3 (evidence core — durable reload upstream-blocked), V0.4
+(Bash runtime guard), and V0.5 (mutation guard expansion) are accepted. This
+stage adds the first public `governed-builder` Skill. The plugin is
 **authority-capable + evidence-recording + monotonic mutation-tool guard
-(`bash` / `write` / `edit`), with read/discovery remaining available**; durable
-evidence reload remains upstream-blocked; path/Git/GitHub enforcement is not
-yet implemented.
+(`bash` / `write` / `edit`) + `governed-builder` Skill**; durable evidence reload
+remains upstream-blocked; path/Git/GitHub hard enforcement and the network
+authority provider remain future work.
 
 ## Design principle
 
@@ -63,6 +63,7 @@ tsdown.config.ts          # self-contained ESM transpile (the `prepare` build)
 | V0.3 | Evidence recorder (`ctx.governanceEvidence`) | Appends canonical facts to an explicit `Session`; re-validates/sanitizes input; never records raw provider payloads. |
 | V0.3 | Evidence projection + flush | `project()` returns governance evidence in sequence order (fails closed on malformed recognized events); `flush()` delegates to the verified `ctx.sessions.flush()` checkpoint. |
 | V0.4–V0.5 | Runtime guard policy (`ctx.governanceGuard`) | A single monotonic `ctx.tools.guard()` denying the mutation-capable tools `bash`, `write`, and `edit` with no accepted authority or in a terminal state. Reads live governance state; not model-facing; never mutates arguments, parses Bash, or enforces paths. |
+| V0.6 | Governed builder Skill (`governed-builder`) | A runtime-registered, provider-neutral operating procedure for the Builder role. Behavioral guidance only; never advances the lifecycle, installs authority, or unlocks mutation. |
 
 ## Evidence events (V0.3)
 
@@ -103,6 +104,25 @@ The exact V0.5 enforcement boundary:
 - does not protect GitHub/MCP actions;
 - does not durably record guard decisions (deferred by the accepted upstream
   SessionEvent blocker) — the guard emits no new `governance/*` SessionEvent.
+
+## Governed builder Skill (V0.6)
+
+The instruction-layer counterpart to the runtime guard: a single
+runtime-registered Skill named `governed-builder` (via the verified
+`ctx.skills.register()` surface), carrying the provider-neutral operating
+procedure for a repository Builder under external task authority. Its semantic
+sections cover: role/authority (Builder, not acceptor), read/discovery versus
+mutation, task execution discipline, Git/delivery, fail-closed `BLOCKED`
+semantics, and the evidence/completion report.
+
+It contains an explicit **runtime enforcement vs guidance** truth section:
+runtime-enforced are only the mutation-tool gates (`bash` / `write` / `edit`,
+terminal-state freeze, read/discovery not gated); everything else —
+protected-branch Git, path allowlists, GitHub merge/close/successor, network
+authority fetching, and independent acceptance itself — is behavioral guidance.
+
+Loading or invoking the Skill never advances the governance lifecycle, installs
+authority, or unlocks mutation. It adds no `SessionEvent` type.
 
 ## Trust model (current boundary)
 
