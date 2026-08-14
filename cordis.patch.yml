@@ -11,3 +11,5 @@
       name: dsh-governed-workflow
     - id: governed-workflow-evidence
       name: dsh-governed-workflow/evidence-service
+    - id: governed-workflow-guard
+      name: dsh-governed-workflow/guard-service

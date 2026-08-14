@@ -12,6 +12,7 @@ to update when re-verifying against a newer DSH.
 | DSH git revision | `47f943859bef60e4160492346772ded9b24f765a` |
 | `@deepseek-ai/dsh` (npm, latest at inspection) | `0.1.0-rc.6` |
 | `@deepseek-ai/dsh-session` (npm, type/unit-tested) | `0.1.0-rc.6` |
+| `@deepseek-ai/dsh-tools` / `dsh-system-prompt` / `dsh-llm` (npm, guard unit-tested) | `0.1.0-rc.6` |
 | `@deepseek-ai/cordis` | `4.0.1` |
 | `@deepseek-ai/schemastery` | `3.18.1` |
 | Node.js | `^22.19.0 || >=24.0.0` (tested on `24.14.0`) |
@@ -37,6 +38,8 @@ the `ignorable` envelope marker — matches the checkout).
 | `Session.deriveMessages()` | Non-surface verification (evidence adds no model message) | `packages/core/session/src/index.ts` |
 | `ctx.sessions.flush(session)` | Explicit durability checkpoint | `packages/core/session/src/index.ts` |
 | `Session.create(id, { seed })` | Replay/seed verification | `packages/core/session/src/index.ts` |
+| `ctx.tools.guard(guard)` + `ToolGuard` (`(exec) => string \| undefined`) | Monotonic runtime guard seam (denial after `tools/pre-execute`, before body) | `packages/core/tools/src/index.ts` |
+| `ToolRuntime.execute(input)` + `ToolExecution` (`name`, `arguments`) | Deterministic guard unit tests; Code Mode sub-dispatches traverse this same pipeline | `packages/core/tools/src/index.ts` |
 | `prepare` build script + pnpm `allowBuilds` | Git-hosted TypeScript install path | `docs/user/develop/basic/publish.md` |
 
 ## Compatibility risks
