@@ -34,3 +34,6 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Check tracked lib matches canonical build
+        run: git diff --exit-code -- lib

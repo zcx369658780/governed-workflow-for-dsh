@@ -142,8 +142,11 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 
-# dsh-governed-workflow build output (built on demand by `prepare`/`build`)
-lib/
+# dsh-governed-workflow prebuilt output — intentionally TRACKED for OMDSH
+# scripts-disabled consumption (the pinned commit must contain its runnable
+# `lib/**`). Regenerate with `pnpm build`; CI verifies tracked `lib/**` matches
+# a clean canonical rebuild (see .github/workflows/ci.yml drift gate).
+# lib/
 
 # Load-smoke-test scratch DSH home
 .dsh-test-home/
