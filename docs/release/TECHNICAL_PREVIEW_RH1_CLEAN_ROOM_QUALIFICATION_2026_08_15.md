@@ -1,6 +1,6 @@
 # Technical Preview RH-1 — Clean-Room Qualification (2026-08-15)
 
-Terminal classification: **`TECHNICAL_PREVIEW_RH1_CLEAN_ROOM_QUALIFICATION_READY_FOR_GPT_REVIEW`**
+Terminal classification: **`TECHNICAL_PREVIEW_RH1_R1_PACK_INVENTORY_EVIDENCE_CONVERGED_PENDING_GPT_REVIEW`**
 
 ## 1–4. Baseline, branch, and candidate
 
@@ -61,8 +61,8 @@ In the isolated `pack-src` clone (`pnpm install --frozen-lockfile`, then `pnpm p
 
 - `prepare` = `tsdown` (builds from `src/`, self-contained; no sibling-monorepo assumption).
 - Tarball `dsh-governed-workflow-0.1.0.tgz` contains exactly:
-  - `package/lib/*.js` (9 built entries/chunks, incl. `index.js`, `guard-service.js`, `lifecycle-tool-service.js`, `github-issue-provider.js`, `github-issue-authority-service.js`);
-  - `package/src/*.ts` (17 source files — declared in `files`);
+  - `package/lib/*.js` (10 built entries/chunks, incl. `index.js`, `guard-service.js`, `lifecycle-tool-service.js`, `github-issue-provider.js`, `github-issue-authority-service.js`);
+  - `package/src/*.ts` (13 source files — declared in `files`);
   - `package/cordis.patch.yml`, `package/package.json`, `package/README.md`, `package/LICENSE`.
 - **Not packaged:** `test/`, `docs/`, `.github/`, workflows, `pnpm-lock.yaml`, `node_modules/`, secrets/private files.
 - `package.json` `files` boundary = `["lib","cordis.patch.yml","src"]`; `dsh.bundle.patch` → `./cordis.patch.yml`.
