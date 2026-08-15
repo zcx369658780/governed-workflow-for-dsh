@@ -35,5 +35,10 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Check tracked lib matches canonical build
-        run: git diff --exit-code -- lib
+      - name: Check tracked lib matches canonical build (fail-closed)
+        run: |
+          if [ -n "$(git status --porcelain --untracked-files=all -- lib)" ]; then
+            echo "prebuilt lib drifted from canonical build:" >&2
+            git status --porcelain --untracked-files=all -- lib >&2
+            exit 1
+          fi

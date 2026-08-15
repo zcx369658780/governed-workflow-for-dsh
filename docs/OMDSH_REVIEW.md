@@ -36,8 +36,11 @@ Validated against the current `package-manifest.schema.json` (JSON Schema
 ## Scripts-disabled distribution proof
 
 The pinned commit now **tracks the canonical prebuilt `lib/**`** (10 files,
-built by `tsdown` from `src/**`; CI enforces `git diff --exit-code -- lib` after a
-clean rebuild). A fresh profile install with `--ignore-scripts`:
+built by `tsdown` from `src/**`; CI enforces a fail-closed post-build drift gate —
+`git status --porcelain --untracked-files=all -- lib` must be empty, which catches
+both modified/deleted tracked files and newly generated untracked files, and
+prints the differing paths on failure). A fresh profile install with
+`--ignore-scripts`:
 
 1. fetched `github:zcx369658780/governed-workflow-for-dsh#5730680…` (pnpm warned
    "build scripts were ignored");
