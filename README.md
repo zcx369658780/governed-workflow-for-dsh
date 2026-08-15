@@ -13,20 +13,22 @@ with a `governed-builder` Skill for instruction-level guidance.
 
 ## Status
 
-**V0.9 builder lifecycle tools.** V0 (bootstrap), V0.1 (governance core), V0.2
-(authority core), V0.3 (evidence core — durable reload upstream-blocked), V0.4
-(Bash runtime guard), V0.5 (mutation guard expansion), V0.6 (governed-builder
-Skill), V0.7 (async authority resolution), and V0.8 (public GitHub Issue
-authority provider) are accepted. V0.9 adds model-facing builder lifecycle
-status/transition tools and tightens mutation gating to accepted-authority +
-RUNNING only. Builder terminal states remain self-freezing; independent
-acceptance is still outside the Builder/runtime tool surface. The project is
+**V0.9 / Developer Technical Preview candidate** — final release-hardening
+(Technical Preview) qualification is in progress; the Owner release gate has not
+yet passed. V0 (bootstrap), V0.1 (governance core), V0.2 (authority core), V0.3
+(evidence core — durable reload upstream-blocked), V0.4 (Bash runtime guard),
+V0.5 (mutation guard expansion), V0.6 (governed-builder Skill), V0.7 (async
+authority resolution), V0.8 (public GitHub Issue authority provider), and V0.9
+(builder lifecycle tools + RUNNING-only guard) are accepted. The project is
 **authority-capable + evidence-recording + RUNNING-only monotonic mutation guard
 (`bash` / `write` / `edit`) + model-facing lifecycle tools + `governed-builder`
 Skill + opt-in public GitHub Issue authority**; durable evidence reload remains
 upstream-blocked; path/Git hard enforcement, authenticated/private GitHub
-authority, and authority replacement remain future work. See
-[docs/architecture.md](docs/architecture.md).
+authority, and authority replacement remain future work.
+
+**New users: start with the
+[Technical Preview quickstart](docs/technical-preview-quickstart.md).** See
+[docs/architecture.md](docs/architecture.md) for the full design.
 
 ## Skill vs runtime plugin
 
@@ -38,6 +40,19 @@ authority, and authority replacement remain future work. See
   `ctx.governanceEvidence`) enforce *non-bypassable invariants*. Loading or
   invoking the Skill never advances the lifecycle, installs authority, or
   unlocks mutation.
+
+## Hard runtime boundary vs guidance (at a glance)
+
+**Hard-enforced at the verified ToolRuntime seam:** accepted authority
+prerequisite; RUNNING-only mutation gate for `bash`/`write`/`edit`; terminal-state
+mutation freeze; lifecycle transition allowlist (`ADMIT_TASK`, `RUN`, `BLOCK`,
+`COMPLETE`, `SUBMIT_REVIEW` only).
+
+**Not hard-enforced (behavioral guidance or future work):** `allowedPaths`
+filesystem containment, Bash/Git semantic parsing, protected-branch Git
+semantics, GitHub merge/close/successor actions, authenticated/private GitHub
+authority, reviewer/owner `ACCEPTED` state/tool, arbitrary same-process hostile
+plugin containment.
 
 ## Evidence
 
@@ -55,16 +70,20 @@ this plugin is installed**. In-memory append/replay works; durable reload is an
 upstream capability blocker. See
 [docs/dsh-compatibility.md](docs/dsh-compatibility.md).
 
-## Install
+## Install (Developer Technical Preview)
+
+This preview is distributed as a **GitHub source install from an exact pinned
+commit**. It is **not published to npm**.
 
 ```sh
-# from npm (when published)
-dsh plugin --profile demo add dsh-governed-workflow
-
-# from this git checkout (TypeScript sources build via the prepare script;
-# pnpm >=10 requires an allowBuilds entry the first time)
-dsh plugin --profile demo add github:zcx369658780/governed-workflow-for-dsh
+# fresh profile, exact RH-1-qualified commit (pnpm >=10 will prompt for a narrow
+# allowBuilds entry on the first run — see the quickstart)
+dsh plugin --profile governed add github:zcx369658780/governed-workflow-for-dsh#897f39a309638dabe99859d83a2160a5913734f9
 ```
+
+See [docs/technical-preview-quickstart.md](docs/technical-preview-quickstart.md)
+for the complete 5–10 minute walkthrough (authority Issue block, GitHub bootstrap
+row, boot/dump-config, and lifecycle usage).
 
 ## Configure an authority (optional)
 

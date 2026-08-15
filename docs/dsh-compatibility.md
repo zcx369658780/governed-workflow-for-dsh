@@ -25,6 +25,30 @@ for the V0.3 evidence surface run against the npm-published
 `@deepseek-ai/dsh-session@0.1.0-rc.6` (the only npm line whose API — including
 the `ignorable` envelope marker — matches the checkout).
 
+## RH-1 external clean-room qualification (accepted)
+
+RH-1 qualified the accepted V0.9 payload **from a fresh environment outside the
+development checkout** using the npm-distributed DSH CLI. Distinguish these
+external facts from the historical source-checkout observations above.
+
+| Component | RH-1 clean-room result |
+|---|---|
+| DSH CLI | npm `@deepseek-ai/dsh` **0.1.0-rc.6** (bin `dsh`), fresh install |
+| OS/platform | Windows 10.0.26200 (x64) |
+| Node | `24.14.0` |
+| npm | `11.9.0` |
+| pnpm | repo build `11.7.0`; fresh-profile install resolved **11.21.0** via Corepack |
+| Qualified plugin runtime SHA | `897f39a309638dabe99859d83a2160a5913734f9` |
+| Install | `dsh plugin --profile <name> add github:zcx369658780/governed-workflow-for-dsh#897f39a…` |
+| allowBuilds | first run `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`; narrow package-specific `allowBuilds` key unblocked; `prepare` (tsdown) built `lib/` self-contained |
+| Composition | fresh-profile `--dump-config` = exactly five default rows (governance, evidence, guard, skill, lifecycle tools); no GitHub bootstrap by default |
+| Boot | clean boot; services loaded; default no-authority fail-closed; no unsolicited GitHub request |
+| Public Issue authority | one unauthenticated GET, no `Authorization` header, `AUTHORITY_OBSERVED` |
+
+The full evidence (pack inventory, lifecycle sequence, isolation proof, caveats)
+is in
+[`docs/release/TECHNICAL_PREVIEW_RH1_CLEAN_ROOM_QUALIFICATION_2026_08_15.md`](release/TECHNICAL_PREVIEW_RH1_CLEAN_ROOM_QUALIFICATION_2026_08_15.md).
+
 ## Interface surface relied upon
 
 | Interface | Used for | Reference |
@@ -73,7 +97,13 @@ the `ignorable` envelope marker — matches the checkout).
   current upstream capability blocker, not a false ignorable claim.
 - **Git installs require a `prepare` allowlist.** pnpm ≥10 refuses to run a git
   dependency's `prepare` script until the consumer adds the package key to the
-  profile's `pnpm-workspace.yaml` under `allowBuilds`.
+  profile's `pnpm-workspace.yaml` under `allowBuilds`. RH-1 proved the exact
+  narrow key shape (`dsh-governed-workflow@https://codeload.github.com/...tar.gz/<sha>: true`)
+  and that the retry runs `prepare` (tsdown) self-contained.
+- **pnpm is resolved via Corepack in a fresh profile.** The repo pins
+  `pnpm@11.7.0`; RH-1's fresh profile resolved `11.21.0` through Corepack, and
+  `prepare` ran identically under both. This is an observed environment fact,
+  not a promise of a fixed pnpm version for every consumer.
 - **GitHub REST is an external surface, not a DSH surface.** The V0.8 provider
   uses `GET https://api.github.com/repos/{owner}/{repo}/issues/{n}` with
   `Accept: application/vnd.github+json`, `X-GitHub-Api-Version: 2022-11-28`, and
