@@ -64,14 +64,20 @@ authority. This is the current boundary, not a universal containment claim.
    before any mutation.
 5. Make only task-authorized changes and validate with task-relevant checks.
 6. Inspect the final diff/status; commit/push only when the task authorizes delivery.
-7. Use \`governance_transition(BLOCK)\` for a truthful blocker, or
-   \`governance_transition(COMPLETE)\` when candidate work is complete.
-8. Use \`governance_transition(SUBMIT_REVIEW)\` and stop; hand off for
-   independent review.
+7. If a blocker appears **before RUNNING** (for example authority cannot be
+   resolved, or a required transition is denied), do NOT call
+   \`governance_transition(BLOCK)\` — \`BLOCK\` and \`COMPLETE\` are only valid
+   from \`RUNNING\`. The current state is already fail-closed and mutation is
+   denied; stop and return a truthful \`BLOCKED_<reason>\` completion report to
+   the Governor/Reviewer.
+8. If a blocker appears **while RUNNING**, use \`governance_transition(BLOCK)\`
+   then \`governance_transition(SUBMIT_REVIEW)\`. Otherwise, when candidate work
+   is complete, use \`governance_transition(COMPLETE)\` then
+   \`governance_transition(SUBMIT_REVIEW)\` and stop for independent review.
 
-\`COMPLETE\` and \`REVIEW_PENDING\` are builder-side terminal states, never
-independent acceptance: acceptance is decided by the reviewer/owner, not the
-Builder.
+\`COMPLETE\` is only valid from \`RUNNING\`. \`COMPLETE\` and \`REVIEW_PENDING\`
+are builder-side terminal states, never independent acceptance: acceptance is
+decided by the reviewer/owner, not the Builder.
 
 ## Git / delivery
 
@@ -91,11 +97,21 @@ guard rules below are non-bypassable.
 
 ## Fail-closed semantics
 
-A valid Builder terminal result may be \`BLOCKED_<reason>\`. Use BLOCKED when,
-for example: authority cannot be resolved; scope/authority conflict; a required
-prerequisite is unavailable; a runtime guard denies a required mutation; or an
-upstream/public API limitation prevents a truthful implementation. A BLOCKED
-result stops the invocation; do not self-repair outside scope.
+A valid Builder terminal result may be \`BLOCKED_<reason>\`. Distinguish the two
+blocker cases:
+
+- **Pre-RUNNING blocker** (authority cannot be resolved, a required transition
+  is denied, or a prerequisite is unavailable before RUNNING): do NOT call
+  \`governance_transition(BLOCK)\` — the lifecycle is already fail-closed and
+  mutation is denied. Stop and report a truthful \`BLOCKED_<reason>\` completion
+  to the Governor/Reviewer.
+- **RUNNING blocker** (a runtime guard denies a required mutation, or an
+  upstream/public API limitation prevents a truthful implementation while
+  running): call \`governance_transition(BLOCK)\`, then
+  \`governance_transition(SUBMIT_REVIEW)\`.
+
+\`COMPLETE\` is only valid from \`RUNNING\`. A \`BLOCKED\`/terminal result stops
+the invocation; do not self-repair outside scope.
 
 ## Evidence and completion report
 

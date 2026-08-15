@@ -190,11 +190,12 @@ REVIEW_PENDING      -> mutation denied (TERMINAL); independent reviewer decides
 ```
 
 No automatic transition occurs merely because authority was fetched; the Builder
-explicitly advances its builder-side lifecycle. A too-early BLOCK/COMPLETE is
-self-freezing (fail-closed), not privilege escalation, and independent review
-remains authoritative. The tools can never create/replace authority, call
-`observeAuthority()`, alter `PROTECTED_MUTATION_TOOLS`, disable the guard, or
-perform shell/filesystem/Git/GitHub work.
+explicitly advances its builder-side lifecycle. `BLOCK` and `COMPLETE` only
+succeed from `RUNNING`; an attempt before `RUNNING` is rejected fail-closed
+(state unchanged, mutation already denied), not privilege escalation, and
+independent review remains authoritative. The tools can never create/replace
+authority, call `observeAuthority()`, alter `PROTECTED_MUTATION_TOOLS`, disable
+the guard, or perform shell/filesystem/Git/GitHub work.
 
 ## Public GitHub Issue authority (V0.8)
 
