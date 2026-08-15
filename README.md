@@ -13,13 +13,19 @@ with a `governed-builder` Skill for instruction-level guidance.
 
 ## Status
 
-**V0.9 / Developer Technical Preview candidate** — final release-hardening
-(Technical Preview) qualification is in progress; the Owner release gate has not
-yet passed. V0 (bootstrap), V0.1 (governance core), V0.2 (authority core), V0.3
-(evidence core — durable reload upstream-blocked), V0.4 (Bash runtime guard),
-V0.5 (mutation guard expansion), V0.6 (governed-builder Skill), V0.7 (async
-authority resolution), V0.8 (public GitHub Issue authority provider), and V0.9
-(builder lifecycle tools + RUNNING-only guard) are accepted. The project is
+**V0.9 / Developer Technical Preview.** Owner Technical Preview decision = **GO**;
+the project is distributed today as an **exact-pinned public GitHub source
+install**. A GitHub prerelease/tag has **not yet been created**, and the package
+is **not published to npm**. OMDSH author-side intake preparation is complete
+through OMDSH-1, but OMDSH Workshop independent review, current-baseline
+verification, and Registry admission remain **pending** (not approved / not
+admitted).
+
+V0 (bootstrap), V0.1 (governance core), V0.2 (authority core), V0.3 (evidence
+core — durable reload upstream-blocked), V0.4 (Bash runtime guard), V0.5
+(mutation guard expansion), V0.6 (governed-builder Skill), V0.7 (async authority
+resolution), V0.8 (public GitHub Issue authority provider), and V0.9 (builder
+lifecycle tools + RUNNING-only guard) are accepted. The project is
 **authority-capable + evidence-recording + RUNNING-only monotonic mutation guard
 (`bash` / `write` / `edit`) + model-facing lifecycle tools + `governed-builder`
 Skill + opt-in public GitHub Issue authority**; durable evidence reload remains
@@ -54,6 +60,32 @@ semantics, GitHub merge/close/successor actions, authenticated/private GitHub
 authority, reviewer/owner `ACCEPTED` state/tool, arbitrary same-process hostile
 plugin containment.
 
+## OMDSH / runtime disclosure
+
+- **Integration:** DSH Profile Bundle / `harness-profile`.
+- **Verified DSH baseline:** `@deepseek-ai/dsh@0.1.0-rc.6` only.
+- **Activation / dispose:** `restart-profile`; dispose `unknown` at whole-bundle
+  Workshop-manifest level.
+- **Named capability:** model-facing read-only `governance_status`.
+- **Permissions/effects:** registers DSH tools, a Skill, a ToolRuntime mutation
+  guard, and appends Session evidence; the **opt-in** public GitHub Issue
+  authority provider may perform one fixed-host unauthenticated GitHub.com read.
+- **Default network:** none unless the GitHub authority bootstrap is explicitly
+  enabled. **Credentials:** none read by the described provider/runtime path.
+  **Subprocess/native code:** none as plugin runtime behavior.
+- **Scripts-disabled readiness:** tracked prebuilt `lib/**`; OMDSH-1
+  install/remove/reinstall evidence in
+  [docs/OMDSH_REVIEW.md](docs/OMDSH_REVIEW.md).
+- **Tests:** repository CI covers 167 tests / 12 files at OMDSH-1 acceptance,
+  plus typecheck/build and a fail-closed `lib/**` drift gate — repository
+  evidence, not OMDSH certification.
+- **Market state:** Workshop submission / independent verification / Registry
+  admission pending.
+
+See [docs/OMDSH_REVIEW.md](docs/OMDSH_REVIEW.md),
+[docs/dsh-compatibility.md](docs/dsh-compatibility.md),
+[docs/architecture.md](docs/architecture.md), and [SECURITY.md](SECURITY.md).
+
 ## Evidence
 
 Governance facts are appended to an explicit `Session` as non-surface events
@@ -75,11 +107,25 @@ upstream capability blocker. See
 This preview is distributed as a **GitHub source install from an exact pinned
 commit**. It is **not published to npm**.
 
+### Current OMDSH-ready pinned source
+
 ```sh
-# fresh profile, exact RH-1-qualified commit (pnpm >=10 will prompt for a narrow
-# allowBuilds entry on the first run — see the quickstart)
-dsh plugin --profile governed add github:zcx369658780/governed-workflow-for-dsh#897f39a309638dabe99859d83a2160a5913734f9
+dsh plugin --profile governed add github:zcx369658780/governed-workflow-for-dsh#266f40e0b5eda5b82f1b25444f9f044db65c7634
 ```
+
+`266f40e0b5eda5b82f1b25444f9f044db65c7634` is the current author-side package
+source prepared for Workshop submission: it carries the same accepted runtime
+semantics plus tracked prebuilt `lib/**` (so scripts-disabled consumption does
+not depend on `prepare` generating `lib/**`), `dshWorkshop`, and
+`docs/OMDSH_REVIEW.md`.
+
+### Historical RH-1 qualification reference
+
+`897f39a309638dabe99859d83a2160a5913734f9` remains the clean-room Technical
+Preview qualification evidence SHA (RH-1). The
+[quickstart](docs/technical-preview-quickstart.md) still uses this historical
+SHA; it is valid qualification provenance, not the current OMDSH-ready
+submission coordinate.
 
 See [docs/technical-preview-quickstart.md](docs/technical-preview-quickstart.md)
 for the complete 5–10 minute walkthrough (authority Issue block, GitHub bootstrap
