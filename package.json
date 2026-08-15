@@ -26,6 +26,49 @@
       "patch": "./cordis.patch.yml"
     }
   },
+  "dshWorkshop": {
+    "schema": "omdsh-workshop-package/v1",
+    "type": "plugin",
+    "integration": {
+      "protocol": "harness-profile",
+      "artifact": "cordis.patch.yml"
+    },
+    "install": {
+      "mode": "transactional",
+      "adapter": "profile-bundle",
+      "failurePolicy": "generation-rollback",
+      "touchesCurrentBeforeActivation": false
+    },
+    "lifecycle": {
+      "activation": "restart-profile",
+      "dispose": "unknown"
+    },
+    "permissions": [
+      "harness:tool",
+      "harness:skill",
+      "harness:guard",
+      "session:append",
+      "network:read",
+      "credentials:none",
+      "subprocess:none",
+      "native-code:none"
+    ],
+    "compatibility": {
+      "dshVersions": ["0.1.0-rc.6"]
+    },
+    "capability": {
+      "id": "governance-status",
+      "kind": "tool",
+      "invocation": "invoke the model-facing tool named governance_status with empty arguments through the DSH ToolRuntime",
+      "expected": "a bounded read-only object with fields state (lifecycle state), authorityAccepted (boolean), taskId (string|null), and a last-transition summary"
+    },
+    "evidence": {
+      "install": "docs/OMDSH_REVIEW.md",
+      "failureIsolation": null,
+      "hotReload": null,
+      "remove": "docs/OMDSH_REVIEW.md"
+    }
+  },
   "engines": {
     "node": "^22.19.0 || >=24.0.0"
   },
