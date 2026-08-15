@@ -129,15 +129,17 @@ Put this V1 block at the **top** of a public, **open** GitHub Issue body
 
 ## 6. Enable the public Issue authority bootstrap
 
-Add this row to your profile's own patch layer (`$DSH_HOME/profiles/<name>/cordis.patch.yml`):
+Add this patch operation to your profile's own patch layer
+(`$DSH_HOME/profiles/<name>/cordis.patch.yml`):
 
 ```yaml
-- id: governed-workflow-github
-  name: dsh-governed-workflow/github-issue-authority-service
-  config:
-    repository: OWNER/REPO
-    issueNumber: 123
-    timeoutMs: 12000   # optional, 1000–60000, default 12000
+- insert:
+    - id: governed-workflow-github
+      name: dsh-governed-workflow/github-issue-authority-service
+      config:
+        repository: OWNER/REPO
+        issueNumber: 123
+        timeoutMs: 12000   # optional, 1000–60000, default 12000
 ```
 
 `repository` must be exactly `OWNER/REPO`; `issueNumber` must be a positive safe

@@ -77,11 +77,15 @@ is in
   compatibility-breaking changes. The bundle manifest, patch syntax, the
   `Service` base class, the Schemastery config surface, and the session event
   envelope are the most likely to shift; re-verify before each release.
-- **Version skew.** The npm latest (`@deepseek-ai/dsh@0.1.0-rc.6`) is newer than
-  the tested checkout (`0.1.0-rc.5`). The plugin is smoke-tested against the
-  checkout revision; the npm `@deepseek-ai/dsh-session@0.1.0-rc.6` types match
-  the checkout's session API (including `ignorable`). Compatibility claims are
-  not silently broadened beyond these two tested surfaces.
+- **Version surfaces are two distinct evidence sets.** Historical source-checkout
+  smoke ran against DSH `0.1.0-rc.5` at revision
+  `47f943859bef60e4160492346772ded9b24f765a` (via `pnpm dsh` source execution),
+  and the npm `@deepseek-ai/dsh-session@0.1.0-rc.6` types match that checkout's
+  session API (including `ignorable`). The accepted RH-1 external clean-room
+  qualification independently used the npm-distributed DSH CLI
+  `@deepseek-ai/dsh@0.1.0-rc.6` for a fresh-profile install / `--dump-config` /
+  boot / lifecycle run. These two surfaces are recorded separately; no claim of
+  compatibility with arbitrary current or future DSH releases is made.
 - **`ignorable` is not settable via `Session.append`; first-party durable reload
   is an upstream blocker.** The envelope supports an `ignorable: true` marker,
   but `Session.append` writes only `type`/`seq`/`time`/`data` with no option to
