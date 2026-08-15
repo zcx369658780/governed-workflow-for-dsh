@@ -39,7 +39,9 @@ describe('governed-builder skill content (semantic)', () => {
     expect(content).toContain('Runtime-enforced')
     expect(content).toContain('not yet runtime-enforced')
     expect(content).toContain('bash, write, edit')
-    expect(content).toContain('read/discovery tools are not gated')
+    expect(content).toContain('read/discovery tools')
+    expect(content).toContain('governance_status')
+    expect(content).toContain('not gated by that slice')
     // No false runtime-enforcement claims for path/Git/GitHub.
     expect(content).not.toContain('runtime-enforced: protected-branch')
     expect(content).not.toContain('runtime-enforced: path allowlists')

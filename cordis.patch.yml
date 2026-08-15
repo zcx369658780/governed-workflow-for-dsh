@@ -15,3 +15,5 @@
       name: dsh-governed-workflow/guard-service
     - id: governed-workflow-skill
       name: dsh-governed-workflow/governed-builder-skill
+    - id: governed-workflow-lifecycle-tools
+      name: dsh-governed-workflow/lifecycle-tool-service

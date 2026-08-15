@@ -42,24 +42,36 @@ Keep this provider-neutral: GitHub is one example, not a hard dependency.
 - Do not attempt mutation when the runtime reports no accepted authority.
 - Authority resolution may be synchronous or asynchronous; mutation must wait
   for **accepted** authority, never merely an in-progress fetch.
+- Accepted authority alone is not enough: the protected mutation tools
+  \`bash\` / \`write\` / \`edit\` are allowed only while governance is exactly
+  \`RUNNING\`. Use \`governance_transition(ADMIT_TASK)\` then
+  \`governance_transition(RUN)\` before mutating.
 - A governance runtime denial is final for that action: do not route around it
   through another tool, Code Mode, shell indirection, or retry tricks.
 - After BLOCKED, COMPLETED, or REVIEW_PENDING, stop mutation work.
 
 Current runtime boundary: the mutation-capable tool names \`bash\`, \`write\`, and
-\`edit\` are guarded. This is the current boundary, not a universal containment
-claim.
+\`edit\` are guarded, and are allowed only in the \`RUNNING\` state with accepted
+authority. This is the current boundary, not a universal containment claim.
 
 ## Task execution discipline
 
-1. Refresh current authority and live repository truth.
-2. Identify the exact task scope and relevant files.
-3. Perform read-only discovery first.
-4. Make only task-authorized changes.
-5. Validate with task-relevant tests/checks.
-6. Inspect the final diff/status.
-7. Commit/push only when the task authorizes delivery.
-8. Stop and hand off for independent review.
+1. Re-establish/obtain accepted authority (refresh the authority source first).
+2. Inspect \`governance_status\` when you need to confirm the current lifecycle
+   state or whether authority is accepted.
+3. Identify the exact task scope and relevant files; perform read-only discovery.
+4. Use \`governance_transition(ADMIT_TASK)\`, then \`governance_transition(RUN)\`,
+   before any mutation.
+5. Make only task-authorized changes and validate with task-relevant checks.
+6. Inspect the final diff/status; commit/push only when the task authorizes delivery.
+7. Use \`governance_transition(BLOCK)\` for a truthful blocker, or
+   \`governance_transition(COMPLETE)\` when candidate work is complete.
+8. Use \`governance_transition(SUBMIT_REVIEW)\` and stop; hand off for
+   independent review.
+
+\`COMPLETE\` and \`REVIEW_PENDING\` are builder-side terminal states, never
+independent acceptance: acceptance is decided by the reviewer/owner, not the
+Builder.
 
 ## Git / delivery
 
@@ -99,13 +111,18 @@ includes at least:
 - unresolved blockers/risks;
 - confirmation that you did not self-accept, merge, close, or create a successor.
 
-## Runtime enforcement vs guidance (V0.6)
+## Runtime enforcement vs guidance (V0.9)
 
 Runtime-enforced (non-bypassable at the ToolRuntime boundary):
 
 - accepted authority is required for the mutation tools bash, write, edit;
+- those tools are denied unless governance is exactly RUNNING (authority-only
+  states AUTHORITY_OBSERVED and TASK_ADMITTED deny with NOT_RUNNING);
 - those tools are denied after BLOCKED, COMPLETED, REVIEW_PENDING;
-- read/discovery tools are not gated by that slice.
+- the model-facing \`governance_transition\` tool exposes only the
+  builder-authorized actions ADMIT_TASK / RUN / BLOCK / COMPLETE /
+  SUBMIT_REVIEW — no OBSERVE_AUTHORITY, no ACCEPTED/accept action;
+- read/discovery tools and \`governance_status\` are not gated by that slice.
 
 Behavioral guidance only (not yet runtime-enforced):
 

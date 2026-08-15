@@ -40,7 +40,8 @@ the `ignorable` envelope marker — matches the checkout).
 | `ctx.sessions.flush(session)` | Explicit durability checkpoint | `packages/core/session/src/index.ts` |
 | `Session.create(id, { seed })` | Replay/seed verification | `packages/core/session/src/index.ts` |
 | `ctx.tools.guard(guard)` + `ToolGuard` (`(exec) => string \| undefined`) | Monotonic runtime guard seam (denial after `tools/pre-execute`, before body) | `packages/core/tools/src/index.ts` |
-| `ToolRuntime.execute(input)` + `ToolExecution` (`name`, `arguments`) | Deterministic guard unit tests; Code Mode sub-dispatches traverse this same pipeline | `packages/core/tools/src/index.ts` |
+| `ctx.tools.register(definition)` (fiber-owned) + `defineTool({ name, parameters, output, execute })` | Model-facing `governance_status` / `governance_transition` tools | `packages/core/tools/src/index.ts` + `schema.ts` |
+| `ToolRuntime.execute(input)` + `ToolExecution` (`name`, `arguments`) | Deterministic guard/tool unit tests; Code Mode sub-dispatches traverse this same pipeline | `packages/core/tools/src/index.ts` |
 | `ctx.skills.register(SkillRegistration)` + `ctx.skills.list()` / `ctx.skills.get()` | Runtime-registered `governed-builder` Skill | `packages/skill/skill/src/index.ts` |
 | Cordis `ctx.effect(execute, label)` (returns an awaitable disposer) | Lifecycle-owned GitHub authority bootstrap (abort + timer cleanup on dispose) | `vendor/cordis/src/fiber.ts` |
 | Node global `fetch` / `RequestInit` / `Response` | Default public GitHub.com transport (unauthenticated GET) | Node ≥18 standard library |
