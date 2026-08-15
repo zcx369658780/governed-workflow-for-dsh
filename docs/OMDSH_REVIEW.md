@@ -102,6 +102,35 @@ Declared `permissions` (derived from repository truth, not speculative):
   produced in this task.
 - `hotReload`: `null` — hot reload is not claimed; activation is `restart-profile`.
 
+## plugin-check (ecosystem health) result
+
+Ran the current public `omdsh-dev/dsh-plugin-check` @
+`397aa26df241aca530aa65a08484a664f7d555ad` (built with its own toolchain,
+`checkRepo` invoked read-only against the candidate).
+
+- **verdict:** `fail` (2 error codes); `kind` detected: `tool-bundle`;
+  checks 28 (passed 24, failed 2, warned 1, skipped 1).
+- **errors (recorded, non-blocking for the OMDSH intake contract):**
+  - `missing-main-or-types` — `package.json` has no `types` field. This is the
+    already-documented JS-only limitation ("types authored but not shipped");
+    `package-manifest.schema.json` and `submission.schema.json` do not require
+    `types`, and generating `.d.ts` is outside this task's authorized paths.
+  - `patch-name-mismatch` ×4 — the checker's `tool-bundle` form heuristic
+    (triggered by `@deepseek-ai/dsh-tools` imports) requires each patch row's
+    `name` to equal the package name. This package is a **multi-service bundle**
+    whose five rows use the official DSH subpath-export convention
+    (`dsh-governed-workflow/evidence-service`, etc.), exactly as documented in
+    the official `docs/user/develop/basic/publish.md` (`name: '<pkg>/startup'`).
+    Rewriting those names would break the five-row composition, so it is not a
+    product defect and is left unchanged.
+  - `no-build-script` (warning) — no `prepack` script; moot because `lib/**` is
+    now tracked and included in the tarball via `files`.
+  - hub status `skipped` — not yet listed (expected before submission).
+
+These are `dsh-plugin-check` form-specific conventions, not OMDSH Workshop intake
+requirements: the authoritative `scripts/intake.mjs validate` and both public
+schemas pass for this candidate.
+
 ## Confirmation
 
 This record does **not** claim OMDSH approval, Registry admission, or any
