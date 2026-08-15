@@ -42,24 +42,42 @@ Keep this provider-neutral: GitHub is one example, not a hard dependency.
 - Do not attempt mutation when the runtime reports no accepted authority.
 - Authority resolution may be synchronous or asynchronous; mutation must wait
   for **accepted** authority, never merely an in-progress fetch.
+- Accepted authority alone is not enough: the protected mutation tools
+  \`bash\` / \`write\` / \`edit\` are allowed only while governance is exactly
+  \`RUNNING\`. Use \`governance_transition(ADMIT_TASK)\` then
+  \`governance_transition(RUN)\` before mutating.
 - A governance runtime denial is final for that action: do not route around it
   through another tool, Code Mode, shell indirection, or retry tricks.
 - After BLOCKED, COMPLETED, or REVIEW_PENDING, stop mutation work.
 
 Current runtime boundary: the mutation-capable tool names \`bash\`, \`write\`, and
-\`edit\` are guarded. This is the current boundary, not a universal containment
-claim.
+\`edit\` are guarded, and are allowed only in the \`RUNNING\` state with accepted
+authority. This is the current boundary, not a universal containment claim.
 
 ## Task execution discipline
 
-1. Refresh current authority and live repository truth.
-2. Identify the exact task scope and relevant files.
-3. Perform read-only discovery first.
-4. Make only task-authorized changes.
-5. Validate with task-relevant tests/checks.
-6. Inspect the final diff/status.
-7. Commit/push only when the task authorizes delivery.
-8. Stop and hand off for independent review.
+1. Re-establish/obtain accepted authority (refresh the authority source first).
+2. Inspect \`governance_status\` when you need to confirm the current lifecycle
+   state or whether authority is accepted.
+3. Identify the exact task scope and relevant files; perform read-only discovery.
+4. Use \`governance_transition(ADMIT_TASK)\`, then \`governance_transition(RUN)\`,
+   before any mutation.
+5. Make only task-authorized changes and validate with task-relevant checks.
+6. Inspect the final diff/status; commit/push only when the task authorizes delivery.
+7. If a blocker appears **before RUNNING** (for example authority cannot be
+   resolved, or a required transition is denied), do NOT call
+   \`governance_transition(BLOCK)\` — \`BLOCK\` and \`COMPLETE\` are only valid
+   from \`RUNNING\`. The current state is already fail-closed and mutation is
+   denied; stop and return a truthful \`BLOCKED_<reason>\` completion report to
+   the Governor/Reviewer.
+8. If a blocker appears **while RUNNING**, use \`governance_transition(BLOCK)\`
+   then \`governance_transition(SUBMIT_REVIEW)\`. Otherwise, when candidate work
+   is complete, use \`governance_transition(COMPLETE)\` then
+   \`governance_transition(SUBMIT_REVIEW)\` and stop for independent review.
+
+\`COMPLETE\` is only valid from \`RUNNING\`. \`COMPLETE\` and \`REVIEW_PENDING\`
+are builder-side terminal states, never independent acceptance: acceptance is
+decided by the reviewer/owner, not the Builder.
 
 ## Git / delivery
 
@@ -79,11 +97,21 @@ guard rules below are non-bypassable.
 
 ## Fail-closed semantics
 
-A valid Builder terminal result may be \`BLOCKED_<reason>\`. Use BLOCKED when,
-for example: authority cannot be resolved; scope/authority conflict; a required
-prerequisite is unavailable; a runtime guard denies a required mutation; or an
-upstream/public API limitation prevents a truthful implementation. A BLOCKED
-result stops the invocation; do not self-repair outside scope.
+A valid Builder terminal result may be \`BLOCKED_<reason>\`. Distinguish the two
+blocker cases:
+
+- **Pre-RUNNING blocker** (authority cannot be resolved, a required transition
+  is denied, or a prerequisite is unavailable before RUNNING): do NOT call
+  \`governance_transition(BLOCK)\` — the lifecycle is already fail-closed and
+  mutation is denied. Stop and report a truthful \`BLOCKED_<reason>\` completion
+  to the Governor/Reviewer.
+- **RUNNING blocker** (a runtime guard denies a required mutation, or an
+  upstream/public API limitation prevents a truthful implementation while
+  running): call \`governance_transition(BLOCK)\`, then
+  \`governance_transition(SUBMIT_REVIEW)\`.
+
+\`COMPLETE\` is only valid from \`RUNNING\`. A \`BLOCKED\`/terminal result stops
+the invocation; do not self-repair outside scope.
 
 ## Evidence and completion report
 
@@ -99,13 +127,18 @@ includes at least:
 - unresolved blockers/risks;
 - confirmation that you did not self-accept, merge, close, or create a successor.
 
-## Runtime enforcement vs guidance (V0.6)
+## Runtime enforcement vs guidance (V0.9)
 
 Runtime-enforced (non-bypassable at the ToolRuntime boundary):
 
 - accepted authority is required for the mutation tools bash, write, edit;
+- those tools are denied unless governance is exactly RUNNING (authority-only
+  states AUTHORITY_OBSERVED and TASK_ADMITTED deny with NOT_RUNNING);
 - those tools are denied after BLOCKED, COMPLETED, REVIEW_PENDING;
-- read/discovery tools are not gated by that slice.
+- the model-facing \`governance_transition\` tool exposes only the
+  builder-authorized actions ADMIT_TASK / RUN / BLOCK / COMPLETE /
+  SUBMIT_REVIEW — no OBSERVE_AUTHORITY, no ACCEPTED/accept action;
+- read/discovery tools and \`governance_status\` are not gated by that slice.
 
 Behavioral guidance only (not yet runtime-enforced):
 

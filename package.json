@@ -12,6 +12,7 @@
     "./governed-builder-skill": "./lib/governed-builder-skill.js",
     "./github-issue-provider": "./lib/github-issue-provider.js",
     "./github-issue-authority-service": "./lib/github-issue-authority-service.js",
+    "./lifecycle-tool-service": "./lib/lifecycle-tool-service.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },

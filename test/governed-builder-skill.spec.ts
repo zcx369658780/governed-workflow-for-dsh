@@ -39,7 +39,9 @@ describe('governed-builder skill content (semantic)', () => {
     expect(content).toContain('Runtime-enforced')
     expect(content).toContain('not yet runtime-enforced')
     expect(content).toContain('bash, write, edit')
-    expect(content).toContain('read/discovery tools are not gated')
+    expect(content).toContain('read/discovery tools')
+    expect(content).toContain('governance_status')
+    expect(content).toContain('not gated by that slice')
     // No false runtime-enforcement claims for path/Git/GitHub.
     expect(content).not.toContain('runtime-enforced: protected-branch')
     expect(content).not.toContain('runtime-enforced: path allowlists')
@@ -59,6 +61,24 @@ describe('governed-builder skill content (semantic)', () => {
     expect(content).toContain('tool-name based, not command-semantics based')
     expect(content).toContain('status/diff/log through the protected')
     expect(content).toContain('still requires an accepted')
+  })
+
+  it('does not guide pre-RUNNING callers to call BLOCK (regression)', () => {
+    // Normalize line-wrapping so multi-line sentences are contiguous.
+    const flat = content.replace(/\s+/g, ' ')
+
+    // Pre-RUNNING guidance is explicitly negative about BLOCK and tells the
+    // Builder to stop with a truthful BLOCKED report instead of transitioning.
+    expect(flat).toContain('do NOT call `governance_transition(BLOCK)`')
+    expect(flat).toContain('already fail-closed and mutation is denied')
+    expect(flat).toContain('BLOCKED_<reason>')
+
+    // BLOCK and COMPLETE are documented as RUNNING-only.
+    expect(flat).toContain('only valid from `RUNNING`')
+
+    // The RUNNING blocker path is where BLOCK -> SUBMIT_REVIEW is actually used.
+    expect(flat).toContain('call `governance_transition(BLOCK)`, then')
+    expect(flat).toContain('governance_transition(SUBMIT_REVIEW)')
   })
 })
 

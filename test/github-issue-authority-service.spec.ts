@@ -100,7 +100,15 @@ describe('GitHub Issue authority governance integration (fake transport)', () =>
     const observed = await observation
     expect(observed.ok).toBe(true)
 
+    // Admitted but not RUNNING: write still denied.
     result = await ctx.tools.execute(mutationInput('admitted', 'write'))
+    expect(result.isError).toBe(true)
+    expect(invoked).toBe(false)
+
+    // RUN unlocks mutation.
+    ctx.governance.apply('ADMIT_TASK')
+    ctx.governance.apply('RUN')
+    result = await ctx.tools.execute(mutationInput('running', 'write'))
     expect(result.isError).toBe(false)
     expect(invoked).toBe(true)
   })

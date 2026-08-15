@@ -6,7 +6,7 @@ import ToolRuntime, { defineTool, type ToolExecutionResult } from '@deepseek-ai/
 import GovernanceService from '../src/governance.js'
 import GovernanceToolGuardService from '../src/guard-service.js'
 import { validateAuthority, type AuthorityProvider, type AuthorityResult } from '../src/authority.js'
-import { GOVERNANCE_DENY_NO_AUTHORITY, GOVERNANCE_DENY_TERMINAL_STATE } from '../src/guard.js'
+import { GOVERNANCE_DENY_NO_AUTHORITY, GOVERNANCE_DENY_NOT_RUNNING, GOVERNANCE_DENY_TERMINAL_STATE } from '../src/guard.js'
 
 const VALID_AUTHORITY = {
   taskId: 'issue-11',
@@ -105,24 +105,29 @@ describe('GovernanceToolGuardService (real ToolRuntime guard seam)', () => {
     }
   })
 
-  it('allows every protected mutation tool in non-terminal states with authority', async () => {
+  it('denies every protected mutation tool until exactly RUNNING, then allows', async () => {
     for (const name of MUTATION_TOOLS) {
       const ctx = await mount({ authority: VALID_AUTHORITY })
       let invoked = false
       ctx.tools.register(makeMutationTool(name, () => { invoked = true }))
 
+      // AUTHORITY_OBSERVED -> denied (not RUNNING).
       let result = await ctx.tools.execute(mutationInput(`a-${name}`, name))
-      expect(result.isError).toBe(false)
-      expect(invoked).toBe(true)
+      expect(result.isError).toBe(true)
+      expect(textOf(result)).toContain(GOVERNANCE_DENY_NOT_RUNNING)
+      expect(invoked).toBe(false)
 
       ctx.governance.apply('ADMIT_TASK')
       invoked = false
+      // TASK_ADMITTED -> denied (not RUNNING).
       result = await ctx.tools.execute(mutationInput(`b-${name}`, name))
-      expect(result.isError).toBe(false)
-      expect(invoked).toBe(true)
+      expect(result.isError).toBe(true)
+      expect(textOf(result)).toContain(GOVERNANCE_DENY_NOT_RUNNING)
+      expect(invoked).toBe(false)
 
       ctx.governance.apply('RUN')
       invoked = false
+      // RUNNING -> allowed.
       result = await ctx.tools.execute(mutationInput(`d-${name}`, name))
       expect(result.isError).toBe(false)
       expect(invoked).toBe(true)
@@ -187,11 +192,18 @@ describe('GovernanceToolGuardService (real ToolRuntime guard seam)', () => {
     let invoked = false
     ctx.tools.register(makeMutationTool('write', () => { invoked = true }))
 
+    // AUTHORITY_OBSERVED -> denied (not RUNNING).
     let result = await ctx.tools.execute(mutationInput('w1', 'write'))
-    expect(result.isError).toBe(false)
+    expect(result.isError).toBe(true)
+    expect(textOf(result)).toContain(GOVERNANCE_DENY_NOT_RUNNING)
 
     ctx.governance.apply('ADMIT_TASK')
     ctx.governance.apply('RUN')
+    // RUNNING -> allowed.
+    result = await ctx.tools.execute(mutationInput('w-run', 'write'))
+    expect(result.isError).toBe(false)
+    expect(invoked).toBe(true)
+
     ctx.governance.apply('BLOCK')
     invoked = false
     result = await ctx.tools.execute(mutationInput('w2', 'write'))
@@ -269,8 +281,16 @@ describe('GovernanceToolGuardService (real ToolRuntime guard seam)', () => {
       expect(observed.ok).toBe(true)
       expect(ctx.governance.snapshot().state).toBe('AUTHORITY_OBSERVED')
 
-      // Admitted: write allowed.
+      // Admitted but not RUNNING: write still denied (NOT_RUNNING).
       result = await ctx.tools.execute(mutationInput('w-admitted', 'write'))
+      expect(result.isError).toBe(true)
+      expect(textOf(result)).toContain(GOVERNANCE_DENY_NOT_RUNNING)
+      expect(invoked).toBe(false)
+
+      // RUN unlocks mutation.
+      ctx.governance.apply('ADMIT_TASK')
+      ctx.governance.apply('RUN')
+      result = await ctx.tools.execute(mutationInput('w-running', 'write'))
       expect(result.isError).toBe(false)
       expect(invoked).toBe(true)
     })

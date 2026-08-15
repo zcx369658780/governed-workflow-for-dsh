@@ -13,17 +13,17 @@ with a `governed-builder` Skill for instruction-level guidance.
 
 ## Status
 
-**V0.8 public GitHub Issue authority provider.** V0 (bootstrap), V0.1
-(governance core), V0.2 (authority core), V0.3 (evidence core — durable reload
-upstream-blocked), V0.4 (Bash runtime guard), V0.5 (mutation guard expansion),
-V0.6 (governed-builder Skill), and V0.7 (async authority resolution) are
-accepted. V0.8 adds an explicit opt-in public GitHub.com Issue authority
-provider using one unauthenticated read-only REST request and a strict V1
-machine-readable Issue-body block. GitHub identity is provider-derived; no
-token/private-repo/GraphQL/comment authority, polling, or replacement semantics
-ship yet. The project is **authority-capable + evidence-recording + monotonic
-mutation-tool guard (`bash` / `write` / `edit`) + `governed-builder` Skill +
-opt-in public GitHub Issue authority**; durable evidence reload remains
+**V0.9 builder lifecycle tools.** V0 (bootstrap), V0.1 (governance core), V0.2
+(authority core), V0.3 (evidence core — durable reload upstream-blocked), V0.4
+(Bash runtime guard), V0.5 (mutation guard expansion), V0.6 (governed-builder
+Skill), V0.7 (async authority resolution), and V0.8 (public GitHub Issue
+authority provider) are accepted. V0.9 adds model-facing builder lifecycle
+status/transition tools and tightens mutation gating to accepted-authority +
+RUNNING only. Builder terminal states remain self-freezing; independent
+acceptance is still outside the Builder/runtime tool surface. The project is
+**authority-capable + evidence-recording + RUNNING-only monotonic mutation guard
+(`bash` / `write` / `edit`) + model-facing lifecycle tools + `governed-builder`
+Skill + opt-in public GitHub Issue authority**; durable evidence reload remains
 upstream-blocked; path/Git hard enforcement, authenticated/private GitHub
 authority, and authority replacement remain future work. See
 [docs/architecture.md](docs/architecture.md).
@@ -144,6 +144,32 @@ Malformed/duplicate/missing blocks, oversized or malformed responses, and
 unexpected HTTP states all fail closed. Failure leaves governance
 `UNINITIALIZED` and the mutation guard denying. The V0.3 durable-evidence-reload
 blocker is unchanged.
+
+## Builder lifecycle tools (V0.9, default)
+
+The default bundle also mounts two **model-facing** lifecycle tools:
+
+- `governance_status` — read-only bounded summary (`state`, `authorityAccepted`,
+  accepted `taskId`, last transition summary). Never mutates state.
+- `governance_transition` — applies exactly one builder-authorized action
+  (`ADMIT_TASK`, `RUN`, `BLOCK`, `COMPLETE`, `SUBMIT_REVIEW`) through the
+  canonical state machine.
+
+The intended hard runtime sequence is:
+
+```text
+no authority        -> mutation denied
+AUTHORITY_OBSERVED  -> mutation denied (NOT_RUNNING) -> ADMIT_TASK
+TASK_ADMITTED       -> mutation denied (NOT_RUNNING) -> RUN
+RUNNING             -> mutation may proceed          -> BLOCK | COMPLETE
+BLOCKED / COMPLETED -> mutation denied terminal      -> SUBMIT_REVIEW
+REVIEW_PENDING      -> mutation denied terminal; independent reviewer decides
+```
+
+`OBSERVE_AUTHORITY` and any acceptance/reviewer transition are **not** exposed
+to the model; there is no builder-authorized `ACCEPTED` state. These tools are
+local/no-network, so the default bundle still performs zero network requests
+unless the V0.8 GitHub bootstrap is explicitly enabled.
 
 ## Development
 

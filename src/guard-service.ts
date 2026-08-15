@@ -10,12 +10,13 @@ declare module '@deepseek-ai/cordis' {
 }
 
 /**
- * V0.4 monotonic Bash runtime guard. Registers exactly one `ctx.tools.guard()`
- * (owned by this fiber, so it is removed on unload) that reads the LIVE
- * `ctx.governance` snapshot at execution time — never a stale startup decision —
- * and denies `bash` when there is no accepted authority or the lifecycle is in
- * a terminal state. It is not model-facing and never mutates tool arguments,
- * runs shell commands, or performs async/network/filesystem/Git work.
+ * V0.4/V0.5/V0.9 monotonic runtime guard. Registers exactly one
+ * `ctx.tools.guard()` (owned by this fiber, so it is removed on unload) that
+ * reads the LIVE `ctx.governance` snapshot at execution time — never a stale
+ * startup decision — and denies the protected mutation tools (`bash`, `write`,
+ * `edit`) unless the lifecycle is exactly `RUNNING` with accepted authority.
+ * It is not model-facing and never mutates tool arguments, runs shell
+ * commands, or performs async/network/filesystem/Git work.
  */
 export class GovernanceToolGuardService extends Service {
   static inject = ['tools', 'governance'] as const

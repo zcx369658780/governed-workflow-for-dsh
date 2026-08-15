@@ -14,6 +14,7 @@ export default defineConfig({
     'src/governed-builder-skill.ts',
     'src/github-issue-provider.ts',
     'src/github-issue-authority-service.ts',
+    'src/lifecycle-tool-service.ts',
   ],
   outDir: 'lib',
   format: ['esm'],

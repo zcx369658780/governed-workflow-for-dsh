@@ -6,15 +6,14 @@ independently authorized tasks.
 
 ## Status
 
-**V0.8 public GitHub Issue authority provider.** V0 (bootstrap), V0.1
-(governance core), V0.2 (authority core), V0.3 (evidence core — durable reload
-upstream-blocked), V0.4 (Bash runtime guard), V0.5 (mutation guard expansion),
-V0.6 (governed-builder Skill), and V0.7 (async authority resolution) are
-accepted. This stage ships an **explicit opt-in** public, unauthenticated,
-read-only GitHub.com Issue authority provider (`kind: github-issue`) plus a
-lifecycle-owned bootstrap. GitHub identity is provider-derived; no
-token/private-repo/GraphQL/comment authority, polling, or replacement semantics
-ship yet.
+**V0.9 builder lifecycle tools.** V0 (bootstrap), V0.1 (governance core), V0.2
+(authority core), V0.3 (evidence core — durable reload upstream-blocked), V0.4
+(Bash runtime guard), V0.5 (mutation guard expansion), V0.6 (governed-builder
+Skill), V0.7 (async authority resolution), and V0.8 (public GitHub Issue
+authority provider) are accepted. This stage adds model-facing builder lifecycle
+status/transition tools and tightens mutation gating to accepted-authority +
+RUNNING only. Builder terminal states remain self-freezing; independent
+acceptance is still outside the Builder/runtime tool surface.
 
 ## Design principle
 
@@ -49,6 +48,7 @@ src/guard-service.ts      # GovernanceToolGuardService (ctx.governanceGuard)
 src/governed-builder-skill.ts  # governed-builder Skill registration
 src/github-issue-provider.ts    # public GitHub Issue authority provider (V0.8)
 src/github-issue-authority-service.ts  # opt-in lifecycle-owned GitHub bootstrap (V0.8)
+src/lifecycle-tool-service.ts  # model-facing builder lifecycle tools (V0.9)
 test/*.spec.ts            # offline lifecycle/authority/evidence/guard/skill tests + real-Context tests
 tsdown.config.ts          # self-contained ESM transpile (the `prepare` build)
 ```
@@ -71,6 +71,8 @@ tsdown.config.ts          # self-contained ESM transpile (the `prepare` build)
 | V0.7 | Async authority resolution | `AuthorityProvider.resolve()` may be synchronous or asynchronous (cancellable); `observeAuthority()` is awaitable, fail-closed on abort, and race-safe — at most one snapshot is ever admitted, with no replacement semantics. |
 | V0.8 | Public GitHub Issue authority provider | `kind: github-issue`. One unauthenticated read-only GET of a fixed `https://api.github.com` endpoint; parses exactly one strict V1 machine-readable Issue-body block; derives `source`/`repository`/`taskId`/`taskReference` from the configured target; returns a canonical `AuthorityResult` for the V0.7 admission path. |
 | V0.8 | GitHub bootstrap service | Explicit opt-in, lifecycle-owned, timeout-bounded, cancellable bootstrap that awaits `ctx.governance.observeAuthority(provider, { signal })`. Absent from the default bundle, so no network request occurs unless a profile enables it. |
+| V0.9 | Builder lifecycle tools (`ctx.governanceLifecycleTools`) | Two model-facing tools: `governance_status` (read-only bounded summary) and `governance_transition` (delegates one of `ADMIT_TASK`/`RUN`/`BLOCK`/`COMPLETE`/`SUBMIT_REVIEW` to the canonical `ctx.governance.apply()`). No `OBSERVE_AUTHORITY`, no `ACCEPTED` action. |
+| V0.9 | RUNNING-only mutation guard | `evaluateGovernanceToolPolicy` now denies protected mutation tools unless state is exactly `RUNNING` with accepted authority; adds `GOVERNANCE_DENY_NOT_RUNNING` for `AUTHORITY_OBSERVED`/`TASK_ADMITTED`. |
 
 ## Evidence events (V0.3)
 
@@ -84,7 +86,7 @@ tsdown.config.ts          # self-contained ESM transpile (the `prepare` build)
 All are non-surface (log-only): they are not in `SurfaceEventType`, so
 `Session.deriveMessages()` never projects them into model-visible history.
 
-## Runtime guard (V0.5)
+## Runtime guard (V0.9)
 
 The runtime-enforcing slice uses the verified monotonic `ctx.tools.guard()`
 seam. Exactly one guard is registered (owned by its fiber, removed on unload)
@@ -94,16 +96,20 @@ snapshot and applies:
 - no accepted authority → deny (`GOVERNANCE_DENY_NO_AUTHORITY`);
 - terminal state (`BLOCKED` / `COMPLETED` / `REVIEW_PENDING`) → deny
   (`GOVERNANCE_DENY_TERMINAL_STATE`);
-- non-terminal state with authority → no opinion (`undefined`).
+- accepted authority but state not exactly `RUNNING` (`AUTHORITY_OBSERVED` /
+  `TASK_ADMITTED`) → deny (`GOVERNANCE_DENY_NOT_RUNNING`);
+- exactly `RUNNING` with accepted authority → no opinion (`undefined`).
 
-The exact V0.5 enforcement boundary:
+The exact V0.9 enforcement boundary:
 
 - protects DSH tool calls named `bash`, `write`, and `edit`;
-- requires an accepted authority and freezes these mutation tools after
-  terminal states;
+- requires an accepted authority **and** the `RUNNING` state; authority-only
+  states are pre-mutation gates, and terminal states freeze these tools;
 - **read/discovery tools (`read`, `read_image`, `grep`, `glob`, …) are not
   gated** by this slice — absence of authority prevents mutation, not
-  observation;
+  observation; the model-facing `governance_status` / `governance_transition`
+  tools are also not gated by this slice (transitions are how the Builder
+  reaches `RUNNING`);
 - does **not** enforce `allowedPaths` / path containment, and does not parse
   Bash for Git semantics, protected-branch, `gh`, or alias/wrapper/subprocess
   behavior;
@@ -155,6 +161,41 @@ There is no authority replacement/refresh in V0.7.
 The built-in `ConfigAuthorityProvider` remains synchronous, and the constructor
 performs a deterministic synchronous bootstrap through the same shared admission
 helper — no detached/background promise exists.
+
+## Builder lifecycle tools (V0.9)
+
+`LifecycleToolService` (`ctx.governanceLifecycleTools`) registers exactly two
+model-facing tools on the normal ToolRuntime (fiber-owned via
+`ctx.tools.register()`):
+
+- `governance_status` — read-only. Returns only `state`, `authorityAccepted`,
+  accepted `taskId`, and a bounded last-transition summary. It never exposes the
+  full `AuthoritySnapshot`, `allowedPaths`, task body text, response bodies,
+  credentials, or secrets, and it never mutates state.
+- `governance_transition` — accepts exactly one action from `ADMIT_TASK`, `RUN`,
+  `BLOCK`, `COMPLETE`, `SUBMIT_REVIEW`, and delegates to the canonical
+  `ctx.governance.apply()` state machine (no duplicated transition logic).
+  `OBSERVE_AUTHORITY` is **not** a model action, and there is no `ACCEPTED`
+  state/action anywhere.
+
+The hard runtime sequence the tools + guard enforce together:
+
+```text
+no authority        -> mutation denied (NO_AUTHORITY)
+AUTHORITY_OBSERVED  -> mutation denied (NOT_RUNNING) -> ADMIT_TASK
+TASK_ADMITTED       -> mutation denied (NOT_RUNNING) -> RUN
+RUNNING             -> mutation may proceed           -> BLOCK | COMPLETE
+BLOCKED / COMPLETED -> mutation denied (TERMINAL)     -> SUBMIT_REVIEW
+REVIEW_PENDING      -> mutation denied (TERMINAL); independent reviewer decides
+```
+
+No automatic transition occurs merely because authority was fetched; the Builder
+explicitly advances its builder-side lifecycle. `BLOCK` and `COMPLETE` only
+succeed from `RUNNING`; an attempt before `RUNNING` is rejected fail-closed
+(state unchanged, mutation already denied), not privilege escalation, and
+independent review remains authoritative. The tools can never create/replace
+authority, call `observeAuthority()`, alter `PROTECTED_MUTATION_TOOLS`, disable
+the guard, or perform shell/filesystem/Git/GitHub work.
 
 ## Public GitHub Issue authority (V0.8)
 
@@ -306,13 +347,19 @@ blocker (`BLOCKED_UPSTREAM_*`), not as a supported durable guarantee.
 DSH composes a running tree from ordered `cordis.patch.yml` layers. This package
 is a **bundle**: its `package.json` declares `dsh.bundle.patch`, so `dsh plugin
 --profile <name> add dsh-governed-workflow` joins the layer stack and its patch
-inserts four rows — `governed-workflow` (the `GovernanceService`),
+inserts five rows — `governed-workflow` (the `GovernanceService`),
 `governed-workflow-evidence` (the `GovernanceEvidenceService`),
-`governed-workflow-guard` (the `GovernanceToolGuardService`), and
-`governed-workflow-skill` (the `GovernedBuilderSkill`).
+`governed-workflow-guard` (the `GovernanceToolGuardService`),
+`governed-workflow-skill` (the `GovernedBuilderSkill`), and
+`governed-workflow-lifecycle-tools` (the `LifecycleToolService`). The V0.8 GitHub
+authority bootstrap is **not** among these rows — it stays opt-in.
 
 ## Non-goals for the current task
 
+- reviewer/owner `ACCEPTED` state or accept tool;
+- GitHub merge/close/successor write operations;
+- automatic lifecycle progression after authority fetch;
+- authority replacement/refresh after acceptance;
 - PAT / `GITHUB_TOKEN` / `GH_TOKEN` / OAuth / GitHub App authentication;
 - private repository authority;
 - GitHub Enterprise/custom API base URL;
@@ -320,18 +367,13 @@ inserts four rows — `governed-workflow` (the `GovernanceService`),
 - Issue comment authority;
 - PR-as-authority;
 - automatic retries/backoff/polling;
-- authority replacement/refresh after acceptance;
-- GitHub write/mutation operations;
 - protected-branch Git runtime enforcement;
 - `allowedPaths` / canonical path enforcement;
 - Bash/Git command parsing (the guard gates tool names, not command semantics);
-- GitHub merge/close/successor runtime enforcement;
-- durable guard-decision SessionEvents (deferred by the accepted upstream
-  SessionEvent blocker);
+- durable lifecycle-tool/guard-decision SessionEvents (deferred by the accepted
+  upstream SessionEvent blocker);
 - workaround for the V0.3 durable-reload blocker;
 - approval workflows;
-- automatic lifecycle admission/run transitions (the bootstrap admits authority
-  only — never `ADMIT_TASK` / `RUN`);
 - policy profiles;
 - reviewer/multi-agent orchestration;
 - successor automation;
