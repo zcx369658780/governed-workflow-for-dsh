@@ -9,8 +9,13 @@
   (re-fetch live `origin/main` before relying on this).
 - **Generation date:** 2026-08-15
 - **Current accepted product stage:** **V0.9** (builder lifecycle tools + RUNNING-only guard).
-- **Current active product implementation task:** **NONE**.
-- **Current docs-only sync task:** Issue #21 — Project Source Sync after V0.9.
+- **Generation provenance:** this canonical set was produced by the docs-only sync
+  task **Issue #21 — Project Source Sync after V0.9** (delivered as PR #22).
+  Issue #21 is generation/synchronization provenance, **not** an active task.
+- **Post-acceptance current state:** once PR #22 is independently accepted/merged
+  and Issue #21 is closed — active product implementation task = **NONE**; active
+  docs-sync task = **NONE**; next intended activity = **release-hardening
+  planning**; do **not** resume Issue #21; do **not** auto-create V0.10.
 
 ## Canonical file set (exactly five)
 
@@ -46,6 +51,11 @@ After these docs are independently accepted and merged, the **Owner** should:
 2. Retire any superseded project-source summaries, so contradictory `CURRENT`
    files are not kept side by side.
 3. Perform the new-session handoff using the `SESSION_HANDOFF_AFTER_V0_9` file.
+
+After acceptance/merge, Issue #21 and PR #22 are **closed provenance**, not
+active tasks: the recovery state is no active product task and no active docs-sync
+task, with release-hardening planning as the next intended activity. Do **not**
+resume Issue #21 and do **not** auto-create V0.10.
 
 The Builder does **not** have authority to mutate ChatGPT Project Sources directly.
 
