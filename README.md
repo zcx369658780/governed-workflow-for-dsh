@@ -107,17 +107,22 @@ upstream capability blocker. See
 This preview is distributed as a **GitHub source install from an exact pinned
 commit**. It is **not published to npm**.
 
-### Current OMDSH-ready pinned source
+### OMDSH-1 merged (pre-OMDSH-2) package source
 
 ```sh
 dsh plugin --profile governed add github:zcx369658780/governed-workflow-for-dsh#266f40e0b5eda5b82f1b25444f9f044db65c7634
 ```
 
-`266f40e0b5eda5b82f1b25444f9f044db65c7634` is the current author-side package
-source prepared for Workshop submission: it carries the same accepted runtime
-semantics plus tracked prebuilt `lib/**` (so scripts-disabled consumption does
-not depend on `prepare` generating `lib/**`), `dshWorkshop`, and
-`docs/OMDSH_REVIEW.md`.
+`266f40e0b5eda5b82f1b25444f9f044db65c7634` is the accepted OMDSH-1 merged /
+pre-OMDSH-2 package source: it carries the same accepted runtime semantics plus
+tracked prebuilt `lib/**` (so scripts-disabled consumption does not depend on
+`prepare` generating `lib/**`), `dshWorkshop`, and `docs/OMDSH_REVIEW.md`.
+
+> The final OMDSH Agent Submission `release.ref` / immutable public source SHA
+> will be re-bound by GPT/Owner to the final merged public SHA **after OMDSH-2 is
+> accepted and merged**, so the formal submission includes the OMDSH-2
+> README/release-truth convergence. Do not treat this pre-OMDSH-2 SHA as the
+> final submission coordinate.
 
 ### Historical RH-1 qualification reference
 

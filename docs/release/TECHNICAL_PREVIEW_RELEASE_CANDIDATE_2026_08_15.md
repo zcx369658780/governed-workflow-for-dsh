@@ -22,13 +22,18 @@
 | Historical RH-1 clean-room runtime qualification | `897f39a309638dabe99859d83a2160a5913734f9` |
 | Accepted RH-2 PR head (docs-only quickstart/README/compat) | `a8128c1e0ae70881bb078da7e0e3c94bd849e557` |
 | Accepted OMDSH-1 candidate head (dshWorkshop + tracked lib + drift gate) | `fc16eb867831fc92ed44bffe1d7783290a2cb7bc` |
-| Current merged OMDSH-ready source (`main`) | `266f40e0b5eda5b82f1b25444f9f044db65c7634` |
+| Accepted OMDSH-1 merged / pre-OMDSH-2 package source | `266f40e0b5eda5b82f1b25444f9f044db65c7634` |
 
-The **current OMDSH-ready distribution/submission source coordinate** is
-`266f40e0b5eda5b82f1b25444f9f044db65c7634`. The RH-1 SHA
+`266f40e0b5eda5b82f1b25444f9f044db65c7634` is the **accepted OMDSH-1 merged /
+pre-OMDSH-2 package source** (the `main` at OMDSH-1 merge). It is **not** the
+final merged `main` once OMDSH-2 is accepted. The RH-1 SHA
 `897f39a309638dabe99859d83a2160a5913734f9` remains the historical clean-room
-qualification evidence and is **not** collapsed into the current source
-coordinate.
+qualification evidence and is **not** collapsed into any distribution coordinate.
+
+The formal OMDSH Agent Submission `release.ref` / immutable public source SHA
+will be re-bound by GPT/Owner to the final merged public SHA **after OMDSH-2 is
+accepted and merged**, so the submission includes the OMDSH-2 README /
+release-truth convergence.
 
 ## Qualification / hardening history
 
@@ -42,8 +47,8 @@ coordinate.
 - **OMDSH-1 (accepted):** author-side packaging/intake hardening — `dshWorkshop`
   manifest, tracked prebuilt `lib/**`, scripts-disabled consumption evidence, and
   a fail-closed generated-lib drift gate. No runtime-semantic change. Candidate
-  head `fc16eb867831fc92ed44bffe1d7783290a2cb7bc`; merged source `main`
-  `266f40e0b5eda5b82f1b25444f9f044db65c7634`.
+  head `fc16eb867831fc92ed44bffe1d7783290a2cb7bc`; accepted merged / pre-OMDSH-2
+  package source `266f40e0b5eda5b82f1b25444f9f044db65c7634`.
 
 ## Tested compatibility matrix
 
