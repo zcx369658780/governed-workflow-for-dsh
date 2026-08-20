@@ -147,6 +147,37 @@ describe('installer global effective-binding verification', () => {
     expect(result.problems.some((p) => p.includes('wrong name binding for governed-workflow'))).toBe(true)
   })
 
+  it('ignores a governed id/name nested inside an unrelated row config (PASS when top-level rows are correct)', () => {
+    const output =
+      fullOutput(correctEntries()) +
+      `# == <some bundle>\n- id: unrelated-group\n  name: some/group\n  config:\n    - id: governed-workflow-guard\n      name: dsh-governed-workflow/guard-service\n`
+    const result = verifyEffectiveBinding(output)
+    expect(result.ok).toBe(true)
+    expect(result.problems).toEqual([])
+  })
+
+  it('does not let a nested governed row satisfy a missing top-level row (FAIL)', () => {
+    const output =
+      fullOutput(correctEntries().filter((entry) => entry.id !== 'governed-workflow-guard')) +
+      `# == <some bundle>\n- id: unrelated-group\n  name: some/group\n  config:\n    - id: governed-workflow-guard\n      name: dsh-governed-workflow/guard-service\n`
+    const result = verifyEffectiveBinding(output)
+    expect(result.ok).toBe(false)
+    expect(result.problems.some((p) => p.includes('missing row id: governed-workflow-guard'))).toBe(true)
+  })
+
+  it('does not accept a nested config.name as the top-level row name (FAIL)', () => {
+    const output =
+      `# == dsh-governed-workflow\n- id: governed-workflow\n  config:\n    name: dsh-governed-workflow\n` +
+      correctEntries()
+        .filter((entry) => entry.id !== 'governed-workflow')
+        .map((entry) => `- id: ${entry.id}\n  name: ${entry.name}`)
+        .join('\n') +
+      `\n`
+    const result = verifyEffectiveBinding(output)
+    expect(result.ok).toBe(false)
+    expect(result.problems.some((p) => p.includes('wrong name binding for governed-workflow'))).toBe(true)
+  })
+
   it('parses all top-level entries across provenance sections', () => {
     const output =
       fullOutput(correctEntries()) +

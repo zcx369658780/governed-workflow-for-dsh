@@ -106,16 +106,17 @@ export function buildDumpConfigArgs(profile) {
 }
 
 /**
- * Parse ALL top-level `- id: …` / `name: …` entries of a composed
- * `dsh --dump-config` output (across every provenance section), so governed ids
- * inserted by later profile/home/CLI sections are also seen. Indentation-aware:
- * nested `config` blocks are ignored and `name` is read at the entry's child
- * indent.
+ * Parse ONLY the top-level `- id: …` rows of a composed `dsh --dump-config`
+ * output (across every provenance section), so governed ids inserted by later
+ * profile/home/CLI sections are also seen. The DSH dump format places each
+ * top-level row at document column 0 (`- id: xxx`) with its direct fields
+ * (`name: …`) at exactly 2-space indent; anything deeper (nested `config`
+ * blocks, including nested `- id:` / `name:` inside them) is deliberately
+ * ignored so nested ids/names never participate in top-level binding checks.
  */
 export function parseTopLevelEntries(output) {
   const entries = []
   let current = null
-  let currentIndent = 0
   for (const line of String(output).split('\n')) {
     const trimmed = line.trim()
     if (/^# == /.test(trimmed)) {
@@ -123,16 +124,19 @@ export function parseTopLevelEntries(output) {
       continue
     }
     const indent = line.length - line.trimStart().length
-    const idMatch = /^- id:\s*(.+?)\s*$/.exec(trimmed)
-    if (idMatch) {
-      current = { id: idMatch[1], name: undefined }
-      currentIndent = indent
-      entries.push(current)
+    if (indent === 0) {
+      const idMatch = /^- id:\s*(.+?)\s*$/.exec(trimmed)
+      if (idMatch) {
+        current = { id: idMatch[1], name: undefined }
+        entries.push(current)
+      }
       continue
     }
-    if (current) {
+    // Only the direct field level (2 spaces under a column-0 row) may carry
+    // the row's `name`; nested `name:` inside `config:` is never the row name.
+    if (current && indent === 2) {
       const nameMatch = /^name:\s*(.+?)\s*$/.exec(trimmed)
-      if (nameMatch && indent > currentIndent) {
+      if (nameMatch) {
         current.name = nameMatch[1]
       }
     }
