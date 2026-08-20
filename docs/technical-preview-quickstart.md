@@ -54,7 +54,7 @@ from a **pinned commit** (never floating `main`):
 
 ```sh
 git clone https://github.com/zcx369658780/governed-workflow-for-dsh.git
-git -C governed-workflow-for-dsh checkout 32f05b8cfe2dea17301761d1ef21651209e965e9
+git -C governed-workflow-for-dsh checkout dee7a2573e40df7b3f7c63c8ee29efd30ebccd97
 cd governed-workflow-for-dsh
 ```
 
@@ -63,7 +63,7 @@ cd governed-workflow-for-dsh
 Run the acquired installer with an **explicit immutable commit**:
 
 ```sh
-node scripts/install-dsh-governed-workflow.mjs --profile governed --ref 32f05b8cfe2dea17301761d1ef21651209e965e9
+node scripts/install-dsh-governed-workflow.mjs --profile governed --ref dee7a2573e40df7b3f7c63c8ee29efd30ebccd97
 ```
 
 - `--ref` is **required** (a full 40-character commit SHA) — the installer
@@ -81,7 +81,7 @@ node scripts/install-dsh-governed-workflow.mjs --profile governed --ref 32f05b8c
 The installer wraps this native DSH command (scripts-disabled, pinned):
 
 ```sh
-dsh plugin --profile governed add github:zcx369658780/governed-workflow-for-dsh#32f05b8cfe2dea17301761d1ef21651209e965e9 --ignore-scripts
+dsh plugin --profile governed add github:zcx369658780/governed-workflow-for-dsh#dee7a2573e40df7b3f7c63c8ee29efd30ebccd97 --ignore-scripts
 ```
 
 ### Historical RH-1 qualification provenance
