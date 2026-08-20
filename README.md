@@ -1,5 +1,5 @@
 # governed-workflow-for-dsh
-
+![image](https://github.com/zcx369658780/governed-workflow-for-dsh/blob/main/ChatGPT%20Image%202026%E5%B9%B48%E6%9C%8820%E6%97%A5%2013_15_26.png)
 Independent community plugin for DeepSeek Harness. Not affiliated with or endorsed by DeepSeek.
 
 Policy-enforced, evidence-first governed workflows for DeepSeek Harness agents.
