@@ -2,15 +2,17 @@
 
 Terminal classification: **`IH1_RELIABLE_INSTALLER_QUALIFIED_READY_FOR_GPT_REVIEW`**
 
-> R1 update: post-install verification is now **effective-binding based** (exact
-> id → name of the five default rows, failing closed on wrong/overridden names and
-> ambiguous duplicate ids), and the quickstart documents a **pinned acquisition
-> step**. This record reflects the R1 final installer (`6800da3…`).
+> R2 update: `verifyEffectiveBinding` is now **global** — it parses every
+> top-level entry of the composed `--dump-config` (across all provenance
+> sections), requires each governed id to occur **exactly once** with the exact
+> id → name binding, and recognizes both `# == dsh-governed-workflow` and
+> `# == dsh-governed-workflow, patched by …` provenance headers. This record
+> reflects the R2 final installer (`32f05b8…`).
 
 ## Candidate binding
 
 - Candidate branch: `dsh/ih-1-reliable-installer-2026-08-20`.
-- **R1 clean-room qualified source / installer commit:** `6800da3f4e1de06b7d5af199974c9110c95f5433`.
+- **R2 clean-room qualified source / installer commit:** `32f05b8cfe2dea17301761d1ef21651209e965e9`.
 - Baseline `main` at task start: `540f65d6753566d1cae820577577f0ed75e9fc43`.
 
 ## Clean-room environment
@@ -28,7 +30,7 @@ Terminal classification: **`IH1_RELIABLE_INSTALLER_QUALIFIED_READY_FOR_GPT_REVIE
 
 ```sh
 git clone https://github.com/zcx369658780/governed-workflow-for-dsh.git
-git -C governed-workflow-for-dsh checkout 6800da3f4e1de06b7d5af199974c9110c95f5433
+git -C governed-workflow-for-dsh checkout 32f05b8cfe2dea17301761d1ef21651209e965e9
 cd governed-workflow-for-dsh
 ```
 
@@ -40,45 +42,53 @@ node scripts/install-dsh-governed-workflow.mjs --profile <name> --ref <40-hex-sh
 
 - Requires an immutable `--ref` (full 40-hex); refuses to install from floating
   `main` (verified: invalid `--ref` → `installer error: --ref must be a full
-  40-character lowercase hex commit SHA`, exit 1).
+  40-character lowercase hex commit SHA`, exit 1; missing `--ref` → refuses to
+  install from floating main, exit 1).
 - Installs via `dsh plugin add … --ignore-scripts` (no global script-safety
   relaxation; package-specific scripts-disabled distribution only).
-- **Post-install (effective binding):** runs `dsh --profile <name> --dump-config`,
-  parses the governed layer, and asserts the exact id → name binding of the five
-  default rows. Fails closed on a missing layer/row, a wrong/overridden name, or
-  an ambiguous (duplicate) row id — so a profile/home/CLI patch mis-binding is
-  detected.
+- **Post-install (global effective binding):** runs `dsh --profile <name>
+  --dump-config`, parses **all** top-level entries across every provenance
+  section, and requires each governed id to occur **exactly once** with the exact
+  id → name binding. Fails closed on a missing layer/row, a wrong/overridden
+  name, or a globally ambiguous (duplicate) row id — so a later profile/home/CLI
+  section inserting the same governed id is detected. The governed provenance
+  header is recognized both as `# == dsh-governed-workflow` and
+  `# == dsh-governed-workflow, patched by …` (a legal config-only patch suffix is
+  not misread as the bundle being absent).
 - Does not enable the GitHub Issue authority bootstrap; does not request/store
   credentials; no new runtime dependency (Node built-ins only).
 
-## Observed results (R1 final installer, source `6800da3…`)
+## Observed results (R2 final installer, source `32f05b8…`)
 
-- **acquisition:** PASS — pinned clone + checkout resolved the installer.
-- **install (installer, scripts-disabled):** PASS — `dsh-governed-workflow@github:…#6800da3…`
+- **acquisition:** PASS — pinned clone + checkout of `32f05b8…` resolved the installer.
+- **install (installer, scripts-disabled):** PASS — `dsh-governed-workflow@github:…#32f05b8…`
   installed with `--ignore-scripts` (pnpm warned "build scripts were ignored");
   `lib/index.js` present; profile dependency pinned to the exact commit.
-- **effective-binding verification:** PASS — installer reported
-  `installed dsh-governed-workflow@6800da3… into profile "ih1r1" (governed bundle
-  effective binding verified)`; `--dump-config` showed the exact five id → name
-  bindings and no GitHub bootstrap row.
+- **global effective-binding verification:** PASS — installer reported
+  `installed dsh-governed-workflow@32f05b8… into profile "ih1r2" (governed bundle
+  effective binding verified)` against the real composed `--dump-config`; the
+  `, patched by …` suffix form and a config-only patch (same id/name) also
+  verified PASS, and a later-section duplicate governed id verified FAIL.
 - **boot:** PASS — load-level boot printed all five governed services loaded,
   default no-authority fail-closed, no unsolicited GitHub request.
-- **remove/cleanup:** PASS — `dsh plugin --profile ih1r1 remove
+- **remove/cleanup:** PASS — `dsh plugin --profile ih1r2 remove
   dsh-governed-workflow` removed the dependency and all governed rows.
-- **fail-closed:** PASS — invalid `--ref` and missing `--ref`/`--profile` are
-  rejected before any install.
+- **fail-closed:** PASS — missing/invalid `--ref` and `--profile` are rejected
+  before any install.
 
 ## Focused tests
 
-`test/installer.spec.ts` (16 tests): argument validation, immutable-ref
-requirement, command construction, and effective-binding verification
-(correct-binding pass; missing layer, missing row, wrong-name override,
-duplicate/ambiguous id, and missing-name-binding failures).
+`test/installer.spec.ts` (18 tests): argument validation, immutable-ref
+requirement, command construction, and **global** effective-binding verification —
+correct-binding pass; `, patched by …` suffix pass; missing layer/row fail;
+wrong-name override fail; later-provenance duplicate id fail; duplicate id with
+wrong name fail; globally unique id with wrong name fail; cross-section top-level
+parsing.
 
 ## Repository validation
 
 - `pnpm typecheck` PASS.
-- `pnpm test` PASS — 183 tests / 13 files (167 existing + 16 installer).
+- `pnpm test` PASS — 185 tests / 13 files (167 existing + 18 installer).
 - `pnpm build` PASS (tracked `lib/**` drift clean).
 - `git diff --check` PASS.
 

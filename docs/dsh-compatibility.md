@@ -59,7 +59,7 @@ immutable ref:
 
 ```sh
 git clone https://github.com/zcx369658780/governed-workflow-for-dsh.git
-git -C governed-workflow-for-dsh checkout 6800da3f4e1de06b7d5af199974c9110c95f5433
+git -C governed-workflow-for-dsh checkout 32f05b8cfe2dea17301761d1ef21651209e965e9
 node governed-workflow-for-dsh/scripts/install-dsh-governed-workflow.mjs --profile <name> --ref <40-hex-sha>
 # equivalent native command:
 dsh plugin --profile <name> add github:zcx369658780/governed-workflow-for-dsh#<40-hex-sha> --ignore-scripts
