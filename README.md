@@ -66,7 +66,7 @@ node scripts/install-dsh-governed-workflow.mjs --profile governed --ref <40位 G
 dsh --profile governed --dump-config
 ```
 
-用于确认 Governed Workflow 的五个默认组件已经加载，同时不会自动启用可选的 GitHub Issue network-authority bootstrap。fileciteturn143file0L1-L6
+用于确认 Governed Workflow 的五个默认组件已经加载，同时不会自动启用可选的 GitHub Issue network-authority bootstrap。
 
 > **当前状态：IH-1 候选，尚待独立验收。** 在 IH-1 合并前，上述脚本还不在 `main`，因此暂不作为已发布的一键安装命令。验收完成后，这一节会直接替换为最终 clean-room-qualified 命令和固定版本坐标。
 
@@ -138,6 +138,6 @@ The installer requires an explicit DSH profile and an **immutable source ref**; 
 dsh --profile governed --dump-config
 ```
 
-to verify the five default Governed Workflow components, without automatically enabling the optional GitHub Issue network-authority bootstrap. fileciteturn143file0L1-L6
+to verify the five default Governed Workflow components, without automatically enabling the optional GitHub Issue network-authority bootstrap.
 
 > **Current status: IH-1 candidate, pending independent review.** Until IH-1 is merged, the script is not yet present on `main` and should not be treated as the released one-command installer. After acceptance, this section will be replaced with the exact clean-room-qualified command and pinned release coordinate.
