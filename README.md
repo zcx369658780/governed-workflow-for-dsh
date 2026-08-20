@@ -1,5 +1,5 @@
 # governed-workflow-for-dsh
-![image](![Governed Workflow for DSH](https://github.com/zcx369658780/governed-workflow-for-dsh/docs/assets/governed-workflow-for-dsh-hero.png))
+![Governed Workflow for DSH](docs/assets/governed-workflow-for-dsh-hero.png)
 Independent community plugin for DeepSeek Harness. Not affiliated with or endorsed by DeepSeek.
 
 Policy-enforced, evidence-first governed workflows for DeepSeek Harness agents.
