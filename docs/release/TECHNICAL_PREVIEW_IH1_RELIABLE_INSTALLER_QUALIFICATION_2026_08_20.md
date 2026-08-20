@@ -5,10 +5,12 @@ Terminal classification: **`IH1_RELIABLE_INSTALLER_QUALIFIED_READY_FOR_GPT_REVIE
 ## Candidate binding
 
 - Candidate branch: `dsh/ih-1-reliable-installer-2026-08-20`.
-- Clean-room qualified installer commit: `f4cd731393bc97760041a69db6144f9aae9541dd`
-  (contains `scripts/install-dsh-governed-workflow.mjs` + its `.d.mts` declaration
-  + `test/installer.spec.ts`). The final candidate head is the PR head that adds
-  this qualification record and the docs updates.
+- **Clean-room qualified install source:** `f4cd731393bc97760041a69db6144f9aae9541dd`
+  (the pinned commit whose tracked `lib/**` + `package.json` were installed
+  scripts-disabled). The installer script
+  (`scripts/install-dsh-governed-workflow.mjs`) and its focused tests were
+  clean-room exercised against this source; the candidate head also carries the
+  final cross-platform runner refinement and the docs updates.
 - Baseline `main` at task start: `540f65d6753566d1cae820577577f0ed75e9fc43`.
 
 ## Clean-room environment
