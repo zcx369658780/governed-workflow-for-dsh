@@ -47,20 +47,32 @@ future DSH releases.
 
 ## 3. Fresh profile + pinned GitHub install
 
-### Canonical path: the maintained installer
+### Step 0 — acquire the installer (pinned)
 
-The repository ships a maintained, scripts-disabled installer that installs an
-**explicit immutable commit** and verifies the result:
+The installer is a repository script, so a fresh environment must first obtain it
+from a **pinned commit** (never floating `main`):
 
 ```sh
-node scripts/install-dsh-governed-workflow.mjs --profile governed --ref <40-hex-sha>
+git clone https://github.com/zcx369658780/governed-workflow-for-dsh.git
+git -C governed-workflow-for-dsh checkout 6800da3f4e1de06b7d5af199974c9110c95f5433
+cd governed-workflow-for-dsh
+```
+
+### Canonical path: the maintained installer
+
+Run the acquired installer with an **explicit immutable commit**:
+
+```sh
+node scripts/install-dsh-governed-workflow.mjs --profile governed --ref 6800da3f4e1de06b7d5af199974c9110c95f5433
 ```
 
 - `--ref` is **required** (a full 40-character commit SHA) — the installer
   refuses to install from floating `main`.
 - The installer runs `dsh plugin --profile <name> add github:…#<ref>
   --ignore-scripts` (no global script-safety relaxation) and then verifies the
-  governed bundle layer + five default rows via `--dump-config`.
+  effective governed bundle layer — the exact id → name binding of the five
+  default rows — via `--dump-config`, failing closed on a wrong/overridden name
+  or an ambiguous (duplicate) row id.
 - It never enables the GitHub Issue authority bootstrap and never reads
   credentials.
 
@@ -69,7 +81,7 @@ node scripts/install-dsh-governed-workflow.mjs --profile governed --ref <40-hex-
 The installer wraps this native DSH command (scripts-disabled, pinned):
 
 ```sh
-dsh plugin --profile governed add github:zcx369658780/governed-workflow-for-dsh#<40-hex-sha> --ignore-scripts
+dsh plugin --profile governed add github:zcx369658780/governed-workflow-for-dsh#6800da3f4e1de06b7d5af199974c9110c95f5433 --ignore-scripts
 ```
 
 ### Historical RH-1 qualification provenance
