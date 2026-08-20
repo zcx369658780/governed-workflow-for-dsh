@@ -8,6 +8,11 @@
  * `lib/**`), then verifies the resulting profile with
  * `dsh --profile <name> --dump-config`.
  *
+ * Post-install verification is effective-binding based: it parses the composed
+ * dump-config's governed layer and asserts the exact id -> name binding of the
+ * five default rows, failing closed on a missing row, a wrong/overridden name,
+ * or an ambiguous (duplicate) row id.
+ *
  * It never enables the opt-in GitHub Issue authority bootstrap, never requests
  * or stores credentials, and never weakens pnpm/DSH script-safety globally.
  *
@@ -35,6 +40,19 @@ export const EXPECTED_ROWS = [
   'governed-workflow-skill',
   'governed-workflow-lifecycle-tools',
 ]
+
+/**
+ * The exact effective id -> name binding the composed governed layer must have.
+ * A profile/home/CLI patch that overrides a row id to a different name is an
+ * effective-config defect the installer must reject.
+ */
+export const EXPECTED_BINDING = {
+  'governed-workflow': 'dsh-governed-workflow',
+  'governed-workflow-evidence': 'dsh-governed-workflow/evidence-service',
+  'governed-workflow-guard': 'dsh-governed-workflow/guard-service',
+  'governed-workflow-skill': 'dsh-governed-workflow/governed-builder-skill',
+  'governed-workflow-lifecycle-tools': 'dsh-governed-workflow/lifecycle-tool-service',
+}
 
 /**
  * Parse and validate installer argv. Fails closed on a missing/invalid profile
@@ -88,13 +106,79 @@ export function buildDumpConfigArgs(profile) {
 }
 
 /**
- * Verify a `dsh --dump-config` output contains the governed bundle layer and all
- * five expected default rows. Returns `{ ok, layer, missing }`.
+ * Parse the `# == dsh-governed-workflow` layer of a `dsh --dump-config` output
+ * into `{ id, name }` entries (indentation-aware, so nested `config` blocks are
+ * ignored and `name` is read at the entry's child indent).
  */
-export function verifyDumpConfigOutput(output) {
-  const layer = output.includes('# == dsh-governed-workflow')
-  const missing = EXPECTED_ROWS.filter((id) => !output.includes(`- id: ${id}`))
-  return { ok: layer && missing.length === 0, layer, missing }
+export function parseGovernedLayer(output) {
+  const entries = []
+  let inLayer = false
+  let current = null
+  let currentIndent = 0
+  for (const line of String(output).split('\n')) {
+    const trimmed = line.trim()
+    if (/^# == /.test(trimmed)) {
+      inLayer = trimmed === '# == dsh-governed-workflow'
+      current = null
+      continue
+    }
+    if (!inLayer) continue
+    const indent = line.length - line.trimStart().length
+    const idMatch = /^- id:\s*(.+?)\s*$/.exec(trimmed)
+    if (idMatch) {
+      current = { id: idMatch[1], name: undefined }
+      currentIndent = indent
+      entries.push(current)
+      continue
+    }
+    if (current) {
+      const nameMatch = /^name:\s*(.+?)\s*$/.exec(trimmed)
+      if (nameMatch && indent > currentIndent) {
+        current.name = nameMatch[1]
+      }
+    }
+  }
+  return entries
+}
+
+/**
+ * Verify the effective id -> name binding of the five default governed rows.
+ * Returns `{ ok, layer, problems }`; fails closed on a missing row, a
+ * wrong/overridden name, or an ambiguous (duplicate) row id.
+ */
+export function verifyEffectiveBinding(output) {
+  const layer = String(output).includes('# == dsh-governed-workflow')
+  const entries = parseGovernedLayer(output)
+  const problems = []
+
+  if (!layer) {
+    problems.push('governed bundle layer not found')
+  }
+
+  const seen = new Set()
+  for (const entry of entries) {
+    if (entry.id === undefined || entry.id === '') {
+      problems.push('entry missing id')
+      continue
+    }
+    if (seen.has(entry.id)) {
+      problems.push(`ambiguous (duplicate) row id: ${entry.id}`)
+    }
+    seen.add(entry.id)
+  }
+
+  for (const [id, expectedName] of Object.entries(EXPECTED_BINDING)) {
+    const matches = entries.filter((entry) => entry.id === id)
+    if (matches.length === 0) {
+      problems.push(`missing row id: ${id}`)
+    } else if (matches.length > 1) {
+      problems.push(`ambiguous row id: ${id}`)
+    } else if (matches[0].name !== expectedName) {
+      problems.push(`wrong name binding for ${id}: got "${matches[0].name ?? ''}" expected "${expectedName}"`)
+    }
+  }
+
+  return { ok: problems.length === 0, layer, problems }
 }
 
 /** Quote one argument for cmd.exe on Windows (validated args need no quoting). */
@@ -124,7 +208,7 @@ function runCommand(command, args, { capture = false } = {}) {
   })
 }
 
-/** Run the installer end-to-end (install, then verify via dump-config). */
+/** Run the installer end-to-end (install, then verify effective binding). */
 export function main(argv = process.argv.slice(2)) {
   const args = parseArgs(argv)
 
@@ -138,15 +222,12 @@ export function main(argv = process.argv.slice(2)) {
     throw new Error(`dsh --dump-config failed with status ${dump.status ?? 'null'}: ${dump.stderr ?? ''}`.trim())
   }
 
-  const verdict = verifyDumpConfigOutput(dump.stdout ?? '')
+  const verdict = verifyEffectiveBinding(dump.stdout ?? '')
   if (!verdict.ok) {
-    const reason = verdict.layer
-      ? `missing rows: ${verdict.missing.join(', ')}`
-      : 'governed bundle layer not found'
-    throw new Error(`post-install verification failed: ${reason}`)
+    throw new Error(`post-install effective-binding verification failed: ${verdict.problems.join('; ')}`)
   }
 
-  const summary = `installed ${PACKAGE_NAME}@${args.ref} into profile "${args.profile}" (governed bundle verified)`
+  const summary = `installed ${PACKAGE_NAME}@${args.ref} into profile "${args.profile}" (governed bundle effective binding verified)`
   console.log(summary)
   return summary
 }

@@ -1,17 +1,28 @@
 import { describe, expect, it } from 'vitest'
 import {
+  EXPECTED_BINDING,
   EXPECTED_ROWS,
   buildDumpConfigArgs,
   buildInstallArgs,
   buildInstallSpec,
   parseArgs,
-  verifyDumpConfigOutput,
+  parseGovernedLayer,
+  verifyEffectiveBinding,
 } from '../scripts/install-dsh-governed-workflow.mjs'
 
-function sampleDumpConfig(rows: readonly string[] = EXPECTED_ROWS, withLayer = true): string {
-  const layer = withLayer ? '# == dsh-governed-workflow\n' : ''
-  const body = rows.map((id) => `- id: ${id}\n  name: dsh-governed-workflow`).join('\n')
-  return `# == @deepseek-ai/dsh-base\n- id: tools\n${layer}${body}\n`
+function governedLayer(entries: Array<{ id: string; name?: string }>): string {
+  const body = entries
+    .map((entry) => `- id: ${entry.id}${entry.name !== undefined ? `\n  name: ${entry.name}` : ''}`)
+    .join('\n')
+  return `# == dsh-governed-workflow\n${body}\n`
+}
+
+function fullOutput(entries: Array<{ id: string; name?: string }>): string {
+  return `# == @deepseek-ai/dsh-base\n- id: tools\n  name: '@deepseek-ai/dsh-tools'\n${governedLayer(entries)}`
+}
+
+function correctEntries(): Array<{ id: string; name: string }> {
+  return EXPECTED_ROWS.map((id) => ({ id, name: EXPECTED_BINDING[id] }))
 }
 
 describe('installer parseArgs', () => {
@@ -39,9 +50,11 @@ describe('installer parseArgs', () => {
 
   it('parses valid arguments', () => {
     const ref = 'a'.repeat(40)
-    const parsed = parseArgs(['--profile', 'demo', '--ref', ref, '--dsh', '/custom/dsh'])
-    expect(parsed).toEqual({ profile: 'demo', ref, dshPath: '/custom/dsh' })
-    // default dsh path when omitted
+    expect(parseArgs(['--profile', 'demo', '--ref', ref, '--dsh', '/custom/dsh'])).toEqual({
+      profile: 'demo',
+      ref,
+      dshPath: '/custom/dsh',
+    })
     expect(parseArgs(['--profile', 'demo', '--ref', ref]).dshPath).toBe('dsh')
   })
 })
@@ -52,8 +65,7 @@ describe('installer command construction', () => {
   })
 
   it('builds a scripts-disabled pinned install command', () => {
-    const args = buildInstallArgs('demo', 'b'.repeat(40))
-    expect(args).toEqual([
+    expect(buildInstallArgs('demo', 'b'.repeat(40))).toEqual([
       'plugin',
       '--profile',
       'demo',
@@ -68,21 +80,52 @@ describe('installer command construction', () => {
   })
 })
 
-describe('installer post-install verification', () => {
-  it('passes when the governed layer and all five rows are present', () => {
-    const result = verifyDumpConfigOutput(sampleDumpConfig())
-    expect(result).toEqual({ ok: true, layer: true, missing: [] })
+describe('installer effective-binding verification', () => {
+  it('passes when the governed layer has the exact five id -> name bindings', () => {
+    const result = verifyEffectiveBinding(fullOutput(correctEntries()))
+    expect(result.ok).toBe(true)
+    expect(result.problems).toEqual([])
   })
 
-  it('fails when a default row is missing', () => {
-    const result = verifyDumpConfigOutput(sampleDumpConfig(EXPECTED_ROWS.slice(0, 4)))
+  it('fails closed when the governed bundle layer is absent', () => {
+    const result = verifyEffectiveBinding('# == @deepseek-ai/dsh-base\n- id: tools\n  name: tools\n')
     expect(result.ok).toBe(false)
-    expect(result.missing).toEqual(['governed-workflow-lifecycle-tools'])
+    expect(result.problems).toContain('governed bundle layer not found')
   })
 
-  it('fails when the governed bundle layer is absent', () => {
-    const result = verifyDumpConfigOutput(sampleDumpConfig(EXPECTED_ROWS, false))
+  it('fails closed when a default row is missing', () => {
+    const result = verifyEffectiveBinding(fullOutput(correctEntries().slice(0, 4)))
     expect(result.ok).toBe(false)
-    expect(result.layer).toBe(false)
+    expect(result.problems.some((p) => p.includes('missing row id: governed-workflow-lifecycle-tools'))).toBe(true)
+  })
+
+  it('fails closed when a row id is overridden to a wrong name', () => {
+    const entries = correctEntries().map((entry) =>
+      entry.id === 'governed-workflow-guard' ? { ...entry, name: 'dsh-governed-workflow/evidence-service' } : entry,
+    )
+    const result = verifyEffectiveBinding(fullOutput(entries))
+    expect(result.ok).toBe(false)
+    expect(result.problems.some((p) => p.includes('wrong name binding for governed-workflow-guard'))).toBe(true)
+  })
+
+  it('fails closed on an ambiguous (duplicate) row id', () => {
+    const entries = [...correctEntries(), { id: 'governed-workflow-guard', name: 'dsh-governed-workflow/guard-service' }]
+    const result = verifyEffectiveBinding(fullOutput(entries))
+    expect(result.ok).toBe(false)
+    expect(result.problems.some((p) => p.includes('duplicate row id') || p.includes('ambiguous row id'))).toBe(true)
+  })
+
+  it('fails closed when a row has no name binding', () => {
+    const entries = correctEntries().map((entry) =>
+      entry.id === 'governed-workflow' ? { id: entry.id } : entry,
+    )
+    const result = verifyEffectiveBinding(fullOutput(entries))
+    expect(result.ok).toBe(false)
+    expect(result.problems.some((p) => p.includes('wrong name binding for governed-workflow'))).toBe(true)
+  })
+
+  it('parses the governed layer into id -> name entries and ignores other layers', () => {
+    const entries = parseGovernedLayer(fullOutput(correctEntries()))
+    expect(entries).toEqual(correctEntries())
   })
 })

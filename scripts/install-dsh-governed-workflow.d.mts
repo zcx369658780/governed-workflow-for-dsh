@@ -5,6 +5,7 @@ export const REPO: 'zcx369658780/governed-workflow-for-dsh'
 export const REF_PATTERN: RegExp
 export const PROFILE_PATTERN: RegExp
 export const EXPECTED_ROWS: readonly string[]
+export const EXPECTED_BINDING: Readonly<Record<string, string>>
 
 export interface InstallerArgs {
   profile: string
@@ -12,9 +13,15 @@ export interface InstallerArgs {
   dshPath: string
 }
 
+export interface GovernedLayerEntry {
+  id: string
+  name: string | undefined
+}
+
 export function parseArgs(argv: readonly string[]): InstallerArgs
 export function buildInstallSpec(ref: string): string
 export function buildInstallArgs(profile: string, ref: string): readonly string[]
 export function buildDumpConfigArgs(profile: string): readonly string[]
-export function verifyDumpConfigOutput(output: string): { ok: boolean; layer: boolean; missing: string[] }
+export function parseGovernedLayer(output: string): GovernedLayerEntry[]
+export function verifyEffectiveBinding(output: string): { ok: boolean; layer: boolean; problems: string[] }
 export function main(argv?: readonly string[]): string
