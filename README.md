@@ -1,23 +1,15 @@
-# Governed Workflow for DSH
-
-English | [简体中文](README.zh.md)
-
 ![Governed Workflow for DSH](docs/assets/governed-workflow-for-dsh-hero.png)
 
-> Authority-first governance for DeepSeek Harness coding agents.
->
-> **No accepted task authority, no mutation. Independent review stays outside Builder control.**
+# 中文
 
-`dsh-governed-workflow` is an independent community plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). It brings a GitHub-Issue-governed Builder workflow into the DSH runtime and adds fail-closed lifecycle controls around mutation.
+`dsh-governed-workflow` 是一个面向 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的独立社区插件，用 GitHub Issue 作为任务权限来源，并在 Agent 修改代码前后加入 fail-closed 生命周期治理。
 
-This project is **not affiliated with or endorsed by DeepSeek**.
+本项目不隶属于 DeepSeek，也不代表 DeepSeek 官方背书。
 
-## What it does
-
-A governed task follows a bounded lifecycle:
+## 插件流程
 
 ```text
-GitHub Issue authority
+GitHub Issue Authority
         ↓
      OBSERVE
         ↓
@@ -30,154 +22,66 @@ BLOCK / COMPLETE
       REVIEW
 ```
 
-Core ideas:
+- **Issue 决定任务权限**：Builder 不从旧聊天记录或自己的计划推断 authority。
+- **只有 `RUNNING` 才能修改**：当前受保护工具为 `bash`、`write`、`edit`。
+- **Fail closed**：缺少/错误 authority、非法状态迁移或进入终态后，修改默认被拒绝。
+- **独立验收**：Builder 不能自行 ACCEPT、merge 或创建后续任务；最终决定留给独立 Reviewer / Owner。
 
-- **GitHub Issue Authority** — task scope comes from an explicit authoritative Issue, not stale chat memory or the Builder's own plan.
-- **RUNNING-only mutation** — protected mutation tools are denied until accepted authority exists and lifecycle state is exactly `RUNNING`.
-- **Fail closed** — missing/malformed authority, illegal lifecycle transitions, and terminal Builder states deny mutation instead of being bypassed.
-- **Independent review** — the Builder cannot self-accept, merge, close an accepted task, or create/activate a successor task.
-- **Evidence-first** — governance authority and lifecycle transitions are recorded as bounded governance evidence.
+当前为 **V0.9 Developer Technical Preview**，验证基线为 `@deepseek-ai/dsh@0.1.0-rc.6`，包名为 `dsh-governed-workflow`。
 
-## Current status
+## 安装
 
-**V0.9 — Developer Technical Preview**
+新的 canonical 安装入口正在通过 **IH-1 installer + clean-room qualification** 收敛。该安装器会放在 `scripts/**`，并要求用户显式提供：
 
-Implemented today:
+- DSH Profile 名称；
+- **immutable source ref**（固定 commit / 不允许浮动 `main`）；
+- 安装后自动执行 `dsh --profile <name> --dump-config`，确认 Governed Workflow 的五个默认组件已加载；
+- 默认不启用可选的 GitHub Issue network authority bootstrap。
 
-- governance lifecycle state machine;
-- provider-neutral authority validation and single-snapshot admission;
-- opt-in public GitHub Issue authority provider;
-- RUNNING-only guard for `bash`, `write`, and `edit`;
-- `governance_status` and `governance_transition` model-facing tools;
-- `governed-builder` Skill;
-- governance evidence recording;
-- fail-closed terminal-state mutation freeze.
+在 IH-1 独立验收完成前，README **不再推荐历史 SHA 或旧的一键安装命令**。仓库当前尚未发布到 npm；旧安装记录只作为历史 qualification evidence 保留。
 
-Verified baseline:
-
-```text
-DeepSeek Harness: @deepseek-ai/dsh 0.1.0-rc.6
-Node.js: ^22.19.0 || >=24.0.0
-Integration: DSH Profile Bundle / harness-profile
-Package: dsh-governed-workflow
-```
-
-The package is **not published to npm**. OMDSH Workshop submission exists, but independent Workshop review/current-baseline verification/Registry admission remain pending.
-
-## Installation
-
-A reliable end-user installation path is currently being hardened.
-
-The repository contains historical clean-room source-install evidence, but those older commands and pinned SHAs are **not treated as the canonical install command for new users**. We are replacing them with a tested installer / reproducible install instruction before advertising a one-command setup here.
-
-Until that work lands:
-
-- package identity: `dsh-governed-workflow`;
-- distribution: public GitHub source, not npm;
-- activation model: DSH Profile Bundle;
-- do **not** copy old install commands from historical release records as if they were current.
-
-For qualification history only, see [Technical Preview quickstart](docs/technical-preview-quickstart.md) and [OMDSH review evidence](docs/OMDSH_REVIEW.md).
-
-## Public GitHub Issue authority
-
-The optional GitHub provider reads one public, open GitHub Issue and accepts exactly one machine-readable authority block:
-
-```text
-<!-- dsh-governed-workflow-authority:v1
-{
-  "baselineRef": "main",
-  "baselineSha": "<40-hex-baseline-SHA>",
-  "candidateBranch": "<dedicated-task-branch>",
-  "allowedPaths": ["src/**"],
-  "protectedBranches": ["main"]
-}
--->
-```
-
-The provider is opt-in, public-only, unauthenticated, one-shot, and fixed to `https://api.github.com`. The default bundle performs no GitHub request.
-
-`allowedPaths` is currently authority metadata / Builder guidance; it is **not yet hard filesystem containment**.
-
-## Builder lifecycle
-
-Model-facing governance tools:
-
-```text
-governance_status
-governance_transition
-```
-
-Normal flow:
-
-```text
-AUTHORITY_OBSERVED
-  → ADMIT_TASK
-TASK_ADMITTED
-  → RUN
-RUNNING
-  → COMPLETE or BLOCK
-COMPLETED / BLOCKED
-  → SUBMIT_REVIEW
-REVIEW_PENDING
-  → stop for independent review
-```
-
-There is no Builder-facing `ACCEPTED` action. Acceptance and merge remain outside the Builder runtime surface.
-
-## Hard boundary vs guidance
-
-Hard-enforced at the verified runtime seam:
-
-- accepted authority prerequisite;
-- RUNNING-only mutation for `bash` / `write` / `edit`;
-- terminal-state mutation freeze;
-- lifecycle transition allowlist;
-- authority/provider output re-validation and fail-closed admission.
-
-Not hard-enforced today:
-
-- canonical `allowedPaths` filesystem containment;
-- Bash/Git semantic parsing;
-- protected-branch Git command enforcement;
-- GitHub merge/close/successor API enforcement;
-- authenticated/private GitHub authority;
-- reviewer/owner `ACCEPTED` runtime state;
-- containment of arbitrary hostile same-process plugins.
-
-## Default security properties
-
-Without the optional GitHub authority bootstrap, the default bundle:
-
-- performs no network request;
-- reads no GitHub token or user credential;
-- spawns no subprocess as plugin runtime behavior;
-- loads no native code;
-- fails closed when no accepted authority exists.
-
-## Development
-
-```sh
-pnpm install
-pnpm build
-pnpm typecheck
-pnpm test
-```
-
-## Documentation
-
-- [Architecture and trust model](docs/architecture.md)
-- [DSH compatibility](docs/dsh-compatibility.md)
-- [Technical Preview qualification history](docs/technical-preview-quickstart.md)
-- [OMDSH review evidence](docs/OMDSH_REVIEW.md)
-- [Security](SECURITY.md)
-- [Contributing](CONTRIBUTING.md)
-- [Trademark notice](TRADEMARK_NOTICE.md)
-
-## License
-
-[MIT](LICENSE)
+IH-1 完成后，这里会直接替换为经过 clean-room 验证的一行安装脚本命令。
 
 ---
 
-**Govern first. Ship safe.**
+# English
+
+`dsh-governed-workflow` is an independent community plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). It uses GitHub Issues as task authority and adds a fail-closed lifecycle around coding-agent mutation.
+
+This project is not affiliated with or endorsed by DeepSeek.
+
+## Workflow
+
+```text
+GitHub Issue Authority
+        ↓
+     OBSERVE
+        ↓
+      ADMIT
+        ↓
+       RUN
+        ↓
+BLOCK / COMPLETE
+        ↓
+      REVIEW
+```
+
+- **Issue-defined authority**: the Builder does not infer authority from stale chat or its own plan.
+- **RUNNING-only mutation**: protected tools are currently `bash`, `write`, and `edit`.
+- **Fail closed**: missing/malformed authority, illegal transitions, or terminal states deny mutation.
+- **Independent acceptance**: the Builder cannot self-accept, merge, or create a successor task; final acceptance stays with an independent Reviewer / Owner.
+
+Current stage: **V0.9 Developer Technical Preview**. Verified baseline: `@deepseek-ai/dsh@0.1.0-rc.6`. Package: `dsh-governed-workflow`.
+
+## Installation
+
+The canonical installation surface is currently being finalized through **IH-1 installer + clean-room qualification**. The maintained installer will live under `scripts/**` and will require:
+
+- a DSH profile name;
+- an **immutable source ref** (fixed commit; no floating `main`);
+- a bounded post-install `dsh --profile <name> --dump-config` check proving the five default Governed Workflow components are present;
+- no automatic activation of the optional GitHub Issue network-authority bootstrap.
+
+Until IH-1 passes independent review, this README intentionally does **not** advertise historical SHAs or old one-command install instructions. The package is not published to npm; older install records remain qualification provenance only.
+
+After IH-1 acceptance, this section will be replaced with the exact clean-room-qualified one-line installer command.
