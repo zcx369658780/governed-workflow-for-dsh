@@ -47,17 +47,43 @@ future DSH releases.
 
 ## 3. Fresh profile + pinned GitHub install
 
-Install the RH-1-qualified exact commit (do **not** substitute a floating
-`main`/branch/tag):
+### Canonical path: the maintained installer
+
+The repository ships a maintained, scripts-disabled installer that installs an
+**explicit immutable commit** and verifies the result:
 
 ```sh
-dsh plugin --profile governed add github:zcx369658780/governed-workflow-for-dsh#897f39a309638dabe99859d83a2160a5913734f9
+node scripts/install-dsh-governed-workflow.mjs --profile governed --ref <40-hex-sha>
 ```
 
-### Expected first-run safety gate
+- `--ref` is **required** (a full 40-character commit SHA) — the installer
+  refuses to install from floating `main`.
+- The installer runs `dsh plugin --profile <name> add github:…#<ref>
+  --ignore-scripts` (no global script-safety relaxation) and then verifies the
+  governed bundle layer + five default rows via `--dump-config`.
+- It never enables the GitHub Issue authority bootstrap and never reads
+  credentials.
 
-pnpm ≥10 refuses to run a git dependency's `prepare` build until it is allowed,
-so the first `add` typically fails with:
+### Equivalent native command
+
+The installer wraps this native DSH command (scripts-disabled, pinned):
+
+```sh
+dsh plugin --profile governed add github:zcx369658780/governed-workflow-for-dsh#<40-hex-sha> --ignore-scripts
+```
+
+### Historical RH-1 qualification provenance
+
+The earlier RH-1 clean-room qualification used commit
+`897f39a309638dabe99859d83a2160a5913734f9` with the `prepare`/`allowBuilds` path.
+That SHA remains valid **historical qualification evidence**, not the canonical
+current install coordinate (the package now ships tracked prebuilt `lib/**`, so
+`--ignore-scripts` install is sufficient and no `allowBuilds` entry is required).
+
+### Expected first-run safety gate (legacy `prepare` path only)
+
+If you install a **pre-IH-1 commit without `--ignore-scripts`**, pnpm ≥10 refuses
+to run a git dependency's `prepare` build until it is allowed, failing with:
 
 ```text
 ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED

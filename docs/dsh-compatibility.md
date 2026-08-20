@@ -49,6 +49,22 @@ The full evidence (pack inventory, lifecycle sequence, isolation proof, caveats)
 is in
 [`docs/release/TECHNICAL_PREVIEW_RH1_CLEAN_ROOM_QUALIFICATION_2026_08_15.md`](release/TECHNICAL_PREVIEW_RH1_CLEAN_ROOM_QUALIFICATION_2026_08_15.md).
 
+## IH-1 reliable installer (scripts-disabled canonical path)
+
+Since the package now ships **tracked prebuilt `lib/**`**, the canonical install
+path is scripts-disabled and no longer requires the `prepare`/`allowBuilds` step
+(that remains documented as historical RH-1 provenance only):
+
+```sh
+node scripts/install-dsh-governed-workflow.mjs --profile <name> --ref <40-hex-sha>
+# equivalent native command:
+dsh plugin --profile <name> add github:zcx369658780/governed-workflow-for-dsh#<40-hex-sha> --ignore-scripts
+```
+
+IH-1 clean-room qualified this path on npm DSH CLI `0.1.0-rc.6` / Node `24.14.0`
+(install → `--dump-config` five rows → boot → remove). Evidence:
+[`docs/release/TECHNICAL_PREVIEW_IH1_RELIABLE_INSTALLER_QUALIFICATION_2026_08_20.md`](release/TECHNICAL_PREVIEW_IH1_RELIABLE_INSTALLER_QUALIFICATION_2026_08_20.md).
+
 ## Interface surface relied upon
 
 | Interface | Used for | Reference |

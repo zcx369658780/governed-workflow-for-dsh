@@ -97,17 +97,43 @@ export function verifyDumpConfigOutput(output) {
   return { ok: layer && missing.length === 0, layer, missing }
 }
 
+/** Quote one argument for cmd.exe on Windows (validated args need no quoting). */
+function quoteWindows(arg) {
+  if (!/[\s"&|<>^()%!]/.test(arg)) return arg
+  return `"${arg.replace(/(["^&|<>()%!])/g, '^$1')}"`
+}
+
+/**
+ * Run a command cross-platform. On Windows, run through the shell as a single
+ * command string so `.cmd` shims resolve via PATHEXT (and to avoid Node's
+ * `shell:true` + args-array deprecation); elsewhere spawn directly.
+ */
+function runCommand(command, args, { capture = false } = {}) {
+  if (process.platform === 'win32') {
+    const cmd = [command, ...args].map(quoteWindows).join(' ')
+    return spawnSync(cmd, {
+      stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
+      encoding: capture ? 'utf8' : undefined,
+      shell: true,
+      windowsHide: true,
+    })
+  }
+  return spawnSync(command, args, {
+    stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
+    encoding: capture ? 'utf8' : undefined,
+  })
+}
+
 /** Run the installer end-to-end (install, then verify via dump-config). */
 export function main(argv = process.argv.slice(2)) {
   const args = parseArgs(argv)
-  const shell = process.platform === 'win32'
 
-  const install = spawnSync(args.dshPath, [...buildInstallArgs(args.profile, args.ref)], { stdio: 'inherit', shell })
+  const install = runCommand(args.dshPath, buildInstallArgs(args.profile, args.ref), { capture: false })
   if (install.status !== 0) {
     throw new Error(`dsh plugin add failed with status ${install.status ?? 'null'}`)
   }
 
-  const dump = spawnSync(args.dshPath, [...buildDumpConfigArgs(args.profile)], { encoding: 'utf8', shell })
+  const dump = runCommand(args.dshPath, buildDumpConfigArgs(args.profile), { capture: true })
   if (dump.status !== 0) {
     throw new Error(`dsh --dump-config failed with status ${dump.status ?? 'null'}: ${dump.stderr ?? ''}`.trim())
   }
