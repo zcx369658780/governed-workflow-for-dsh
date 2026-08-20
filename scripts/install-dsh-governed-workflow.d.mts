@@ -13,7 +13,7 @@ export interface InstallerArgs {
   dshPath: string
 }
 
-export interface GovernedLayerEntry {
+export interface TopLevelEntry {
   id: string
   name: string | undefined
 }
@@ -22,6 +22,7 @@ export function parseArgs(argv: readonly string[]): InstallerArgs
 export function buildInstallSpec(ref: string): string
 export function buildInstallArgs(profile: string, ref: string): readonly string[]
 export function buildDumpConfigArgs(profile: string): readonly string[]
-export function parseGovernedLayer(output: string): GovernedLayerEntry[]
+export function parseTopLevelEntries(output: string): TopLevelEntry[]
+export function hasGovernedLayer(output: string): boolean
 export function verifyEffectiveBinding(output: string): { ok: boolean; layer: boolean; problems: string[] }
 export function main(argv?: readonly string[]): string

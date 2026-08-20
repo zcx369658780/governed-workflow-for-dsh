@@ -5,8 +5,9 @@ import {
   buildDumpConfigArgs,
   buildInstallArgs,
   buildInstallSpec,
+  hasGovernedLayer,
   parseArgs,
-  parseGovernedLayer,
+  parseTopLevelEntries,
   verifyEffectiveBinding,
 } from '../scripts/install-dsh-governed-workflow.mjs'
 
@@ -80,9 +81,20 @@ describe('installer command construction', () => {
   })
 })
 
-describe('installer effective-binding verification', () => {
+describe('installer global effective-binding verification', () => {
   it('passes when the governed layer has the exact five id -> name bindings', () => {
     const result = verifyEffectiveBinding(fullOutput(correctEntries()))
+    expect(result.ok).toBe(true)
+    expect(result.problems).toEqual([])
+  })
+
+  it('passes when the governed provenance header carries a ", patched by ..." suffix with correct binding', () => {
+    const body = correctEntries()
+      .map((entry) => `- id: ${entry.id}\n  name: ${entry.name}`)
+      .join('\n')
+    const output = `# == dsh-governed-workflow, patched by <profile cordis.patch.yml>\n${body}\n`
+    expect(hasGovernedLayer(output)).toBe(true)
+    const result = verifyEffectiveBinding(output)
     expect(result.ok).toBe(true)
     expect(result.problems).toEqual([])
   })
@@ -93,7 +105,7 @@ describe('installer effective-binding verification', () => {
     expect(result.problems).toContain('governed bundle layer not found')
   })
 
-  it('fails closed when a default row is missing', () => {
+  it('fails closed when a default row is globally missing', () => {
     const result = verifyEffectiveBinding(fullOutput(correctEntries().slice(0, 4)))
     expect(result.ok).toBe(false)
     expect(result.problems.some((p) => p.includes('missing row id: governed-workflow-lifecycle-tools'))).toBe(true)
@@ -108,14 +120,25 @@ describe('installer effective-binding verification', () => {
     expect(result.problems.some((p) => p.includes('wrong name binding for governed-workflow-guard'))).toBe(true)
   })
 
-  it('fails closed on an ambiguous (duplicate) row id', () => {
-    const entries = [...correctEntries(), { id: 'governed-workflow-guard', name: 'dsh-governed-workflow/guard-service' }]
-    const result = verifyEffectiveBinding(fullOutput(entries))
+  it('fails closed on a later provenance section duplicating a governed id', () => {
+    const output =
+      fullOutput(correctEntries()) +
+      `# == <profile cordis.patch.yml>\n- id: governed-workflow-guard\n  name: dsh-governed-workflow/guard-service\n`
+    const result = verifyEffectiveBinding(output)
     expect(result.ok).toBe(false)
-    expect(result.problems.some((p) => p.includes('duplicate row id') || p.includes('ambiguous row id'))).toBe(true)
+    expect(result.problems.some((p) => p.includes('ambiguous row id: governed-workflow-guard'))).toBe(true)
   })
 
-  it('fails closed when a row has no name binding', () => {
+  it('fails closed on a later duplicate governed id with a wrong name', () => {
+    const output =
+      fullOutput(correctEntries()) +
+      `# == <profile cordis.patch.yml>\n- id: governed-workflow-skill\n  name: dsh-governed-workflow/evidence-service\n`
+    const result = verifyEffectiveBinding(output)
+    expect(result.ok).toBe(false)
+    expect(result.problems.some((p) => p.includes('ambiguous row id: governed-workflow-skill'))).toBe(true)
+  })
+
+  it('fails closed when a globally unique governed id has a wrong name', () => {
     const entries = correctEntries().map((entry) =>
       entry.id === 'governed-workflow' ? { id: entry.id } : entry,
     )
@@ -124,8 +147,11 @@ describe('installer effective-binding verification', () => {
     expect(result.problems.some((p) => p.includes('wrong name binding for governed-workflow'))).toBe(true)
   })
 
-  it('parses the governed layer into id -> name entries and ignores other layers', () => {
-    const entries = parseGovernedLayer(fullOutput(correctEntries()))
-    expect(entries).toEqual(correctEntries())
+  it('parses all top-level entries across provenance sections', () => {
+    const output =
+      fullOutput(correctEntries()) +
+      `# == <profile cordis.patch.yml>\n- id: some-other\n  name: some/other\n`
+    const entries = parseTopLevelEntries(output)
+    expect(entries.map((e) => e.id)).toEqual(['tools', ...EXPECTED_ROWS, 'some-other'])
   })
 })

@@ -106,23 +106,22 @@ export function buildDumpConfigArgs(profile) {
 }
 
 /**
- * Parse the `# == dsh-governed-workflow` layer of a `dsh --dump-config` output
- * into `{ id, name }` entries (indentation-aware, so nested `config` blocks are
- * ignored and `name` is read at the entry's child indent).
+ * Parse ALL top-level `- id: …` / `name: …` entries of a composed
+ * `dsh --dump-config` output (across every provenance section), so governed ids
+ * inserted by later profile/home/CLI sections are also seen. Indentation-aware:
+ * nested `config` blocks are ignored and `name` is read at the entry's child
+ * indent.
  */
-export function parseGovernedLayer(output) {
+export function parseTopLevelEntries(output) {
   const entries = []
-  let inLayer = false
   let current = null
   let currentIndent = 0
   for (const line of String(output).split('\n')) {
     const trimmed = line.trim()
     if (/^# == /.test(trimmed)) {
-      inLayer = trimmed === '# == dsh-governed-workflow'
-      current = null
+      current = null // provenance section boundary
       continue
     }
-    if (!inLayer) continue
     const indent = line.length - line.trimStart().length
     const idMatch = /^- id:\s*(.+?)\s*$/.exec(trimmed)
     if (idMatch) {
@@ -142,29 +141,31 @@ export function parseGovernedLayer(output) {
 }
 
 /**
- * Verify the effective id -> name binding of the five default governed rows.
- * Returns `{ ok, layer, problems }`; fails closed on a missing row, a
- * wrong/overridden name, or an ambiguous (duplicate) row id.
+ * True when the composed dump-config contains the governed bundle provenance
+ * layer — recognizing both `# == dsh-governed-workflow` and
+ * `# == dsh-governed-workflow, patched by …`, so a legal config-only patch
+ * suffix is not misread as the bundle being absent.
+ */
+export function hasGovernedLayer(output) {
+  return String(output)
+    .split('\n')
+    .some((line) => /^# == dsh-governed-workflow(?:,.*)?$/.test(line.trim()))
+}
+
+/**
+ * Verify the global effective binding of the five default governed rows across
+ * the WHOLE composed dump-config (not just the governed provenance section).
+ * Returns `{ ok, layer, problems }`; fails closed when a governed row id is
+ * globally missing, appears more than once (ambiguous), or is bound to a
+ * wrong/overridden name.
  */
 export function verifyEffectiveBinding(output) {
-  const layer = String(output).includes('# == dsh-governed-workflow')
-  const entries = parseGovernedLayer(output)
+  const layer = hasGovernedLayer(output)
+  const entries = parseTopLevelEntries(output)
   const problems = []
 
   if (!layer) {
     problems.push('governed bundle layer not found')
-  }
-
-  const seen = new Set()
-  for (const entry of entries) {
-    if (entry.id === undefined || entry.id === '') {
-      problems.push('entry missing id')
-      continue
-    }
-    if (seen.has(entry.id)) {
-      problems.push(`ambiguous (duplicate) row id: ${entry.id}`)
-    }
-    seen.add(entry.id)
   }
 
   for (const [id, expectedName] of Object.entries(EXPECTED_BINDING)) {
@@ -172,7 +173,7 @@ export function verifyEffectiveBinding(output) {
     if (matches.length === 0) {
       problems.push(`missing row id: ${id}`)
     } else if (matches.length > 1) {
-      problems.push(`ambiguous row id: ${id}`)
+      problems.push(`ambiguous row id: ${id} (${matches.length} global occurrences)`)
     } else if (matches[0].name !== expectedName) {
       problems.push(`wrong name binding for ${id}: got "${matches[0].name ?? ''}" expected "${expectedName}"`)
     }
